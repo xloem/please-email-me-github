@@ -103,6 +103,7 @@ from .bigflix import BigflixIE
 from .bild import BildIE
 from .bilibili import (
     BiliBiliIE,
+    BiliBiliSearchIE,
     BiliBiliBangumiIE,
 )
 from .biobiochiletv import BioBioChileTVIE
@@ -743,7 +744,7 @@ from .nick import (
     NickNightIE,
     NickRuIE,
 )
-from .niconico import NiconicoIE, NiconicoPlaylistIE
+from .niconico import NiconicoIE, NiconicoPlaylistIE, NicovideoIE
 from .ninecninemedia import NineCNineMediaIE
 from .ninegag import NineGagIE
 from .ninenow import NineNowIE

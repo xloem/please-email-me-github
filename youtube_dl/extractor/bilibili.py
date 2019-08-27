@@ -1,10 +1,12 @@
 # coding: utf-8
 from __future__ import unicode_literals
 
+import datetime
 import hashlib
+import json
 import re
 
-from .common import InfoExtractor
+from .common import InfoExtractor, SearchInfoExtractor
 from ..compat import (
     compat_parse_qs,
     compat_urlparse,
@@ -306,3 +308,39 @@ class BiliBiliBangumiIE(InfoExtractor):
         return self.playlist_result(
             entries, bangumi_id,
             season_info.get('bangumi_title'), season_info.get('evaluate'))
+
+
+# USAGE: youtube-dl "bilisearch<NUMBER OF ENTRIES>:<SEARCH STRING>"
+class BiliBiliSearchIE(SearchInfoExtractor):
+    IE_DESC = 'Bilibili video search'
+    _MAX_RESULTS = 100000
+    _SEARCH_KEY = 'bilisearch'
+    MAX_NUMBER_OF_RESULTS = 1000
+
+    def _get_n_results(self, query, n):
+        """Get a specified number of results for a query"""
+
+        entries = []
+        pageNumber = 1
+
+        while True:
+            # FIXME
+            api_url= "https://api.bilibili.com/x/web-interface/search/type?context=&page=%s&order=pubdate&keyword=%s&duration=0&tids_2=&__refresh__=true&search_type=video&tids=0&highlight=1" % ( pageNumber, query)
+            json_str = self._download_webpage(api_url, "None", query={"Search_key": query},
+                                         note='Extracting results from page %s' % pageNumber)
+
+            parsed_json = json.loads(json_str)
+
+            videos = parsed_json["data"]["result"]
+            for video in videos:
+                e = self.url_result(video["arcurl"], 'BiliBili')
+                entries.append(e)
+
+            if(len(entries) >= n or len(videos) < BiliBiliSearchIE.MAX_NUMBER_OF_RESULTS):
+                return {
+                    '_type': 'playlist',
+                    'id': query,
+                    'entries': entries[:n]
+                }
+
+            pageNumber += 1
