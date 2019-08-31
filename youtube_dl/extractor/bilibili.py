@@ -228,11 +228,16 @@ class BiliBiliIE(InfoExtractor):
         for entry in entries:
             entry.update(info)
 
+        comments = self._get_all_comment_pages(video_id)
+
         if len(entries) == 1:
+            entries[0]["comments"] = comments
+            entries[0]["comment_count"] = len(comments)
             return entries[0]
         else:
             for idx, entry in enumerate(entries):
                 entry['id'] = '%s_part%d' % (video_id, (idx + 1))
+
 
             return {
                 '_type': 'multi_video',
@@ -240,8 +245,56 @@ class BiliBiliIE(InfoExtractor):
                 'title': title,
                 'description': description,
                 'entries': entries,
+                'comments': comments,
+                'comment_count': len(comments),
             }
 
+    # recursive solution to getting every page of comments for the video
+    # we can stop when we reach a page without any comments
+    def _get_all_comment_pages(self, video_id,  commentPageNumber = 0):
+
+        comment_url = "https://api.bilibili.com/x/v2/reply?jsonp=jsonp&pn=%s&type=1&oid=%s&sort=2&_=1567227301685" % (commentPageNumber, video_id)
+
+        json_str = self._download_webpage(comment_url, "None",
+                                          note='Extracting comments from page %s for video %s' % (commentPageNumber, video_id))
+        parsed_json = json.loads(json_str)
+
+        replies = parsed_json["data"]["replies"]
+
+        if replies == None:
+            return []
+
+        return self._get_all_children(replies) + self._get_all_comment_pages(video_id, commentPageNumber + 1)
+
+    # extracts all comments in the tree
+    def _get_all_children(self, replies):
+        if replies == None:
+            return []
+
+        ret = []
+        for reply in replies:
+            author = reply["member"]["uname"]
+            author_id = reply["member"]["mid"]
+            id = reply["rpid"]
+            text = reply["content"]["message"]
+            timestamp = reply["ctime"]
+            parent = reply["parent"]
+
+            comment = {
+                "author": author,
+                "author_id": author_id,
+                "id": id,
+                "text": text,
+                "timestamp": timestamp,
+                "parent": parent,
+            }
+            ret.append(comment)
+
+            # from the JSON, the comment structure seems arbitrarily deep, but I could be wrong.
+            # Regardless, this should work.
+            ret += self._get_all_children(reply["replies"])
+
+        return ret
 
 class BiliBiliBangumiIE(InfoExtractor):
     _VALID_URL = r'https?://bangumi\.bilibili\.com/anime/(?P<id>\d+)'
