@@ -2040,7 +2040,7 @@ class YoutubeDL(object):
     def filter_requested_info(info_dict):
         return dict(
             (k, v) for k, v in info_dict.items()
-            if k not in ['requested_formats', 'requested_subtitles'])
+            if k not in ['requested_formats', 'requested_subtitles', 'heartbeat_url', 'heartbeat_data', 'heartbeat_interval'])
 
     def post_process(self, filename, ie_info):
         """Run all the postprocessors on the given file."""
