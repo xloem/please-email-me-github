@@ -229,11 +229,13 @@ class BiliBiliIE(InfoExtractor):
         for entry in entries:
             entry.update(info)
 
+        danmaku = self._get_danmaku(video_id)
         comments = self._get_all_comment_pages(video_id)
 
         if len(entries) == 1:
             entries[0]["comments"] = comments
             entries[0]["comment_count"] = len(comments)
+            entries[0]["danmaku"] = danmaku
             return entries[0]
         else:
             for idx, entry in enumerate(entries):
@@ -248,16 +250,17 @@ class BiliBiliIE(InfoExtractor):
                 'entries': entries,
                 'comments': comments,
                 'comment_count': len(comments),
+                'danmaku': danmaku,
             }
 
     # recursive solution to getting every page of comments for the video
     # we can stop when we reach a page without any comments
-    def _get_all_comment_pages(self, video_id,  commentPageNumber = 0):
+    def _get_all_comment_pages(self, video_id, commentPageNumber = 0):
 
         comment_url = "https://api.bilibili.com/x/v2/reply?jsonp=jsonp&pn=%s&type=1&oid=%s&sort=2&_=1567227301685" % (commentPageNumber, video_id)
 
-        json_str = self._download_webpage(comment_url, "None",
-                                          note='Extracting comments from page %s for video %s' % (commentPageNumber, video_id))
+        json_str = self._download_webpage(comment_url, video_id,
+                                          note='Extracting comments from page %s' % (commentPageNumber))
         parsed_json = json.loads(json_str)
 
         replies = parsed_json["data"]["replies"]
@@ -296,6 +299,17 @@ class BiliBiliIE(InfoExtractor):
             ret += self._get_all_children(reply["replies"])
 
         return ret
+
+    def _get_danmaku(self, video_id):
+
+        cid_url = "https://www.bilibili.com/widget/getPageList?aid=%s" % (video_id)
+        cid_str = self._download_webpage(cid_url, video_id, note=False)
+        cid = json.loads(cid_str)[0]["cid"]
+
+        danmaku_url = "https://comment.bilibili.com/%s.xml" % (cid)
+        danmaku = self._download_webpage(danmaku_url, video_id, note='Downloading danmaku comments')
+        
+        return danmaku
 
 class BiliBiliBangumiIE(InfoExtractor):
     _VALID_URL = r'https?://bangumi\.bilibili\.com/anime/(?P<id>\d+)'
@@ -378,7 +392,7 @@ class BiliBiliSearchIE(SearchInfoExtractor):
 
         while True:
             # FIXME
-            api_url= "https://api.bilibili.com/x/web-interface/search/type?context=&page=%s&order=pubdate&keyword=%s&duration=0&tids_2=&__refresh__=true&search_type=video&tids=0&highlight=1" % ( pageNumber, query)
+            api_url= "https://api.bilibili.com/x/web-interface/search/type?context=&page=%s&order=pubdate&keyword=%s&duration=0&tids_2=&__refresh__=true&search_type=video&tids=0&highlight=1" % (pageNumber, query)
             json_str = self._download_webpage(api_url, "None", query={"Search_key": query},
                                          note='Extracting results from page %s' % pageNumber)
 
