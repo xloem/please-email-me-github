@@ -436,12 +436,21 @@ class NiconicoIE(InfoExtractor):
         thread_id = re.findall(r'threadIds&quot;:\[{&quot;id&quot;:([0-9]*)', webpage)[0]
 
         # make API call
-        # FIXME lol
-        curl_command = '''curl 'https://nmsg.nicovideo.jp/api.json/' -H 'User-Agent: Mozilla/5.0 (Windows NT 6.1; Win64; rv:68.0) Gecko/20100101 Firefox/68.0' -H 'Accept: */*' -H 'Accept-Language: en-US,en;q=0.5' --compressed -H 'Referer: https://www.nicovideo.jp/watch/sm9' -H 'Content-Type: text/plain;charset=UTF-8' -H 'Origin: https://www.nicovideo.jp' -H 'Connection: keep-alive' --data '[{"ping":{"content":"rs:0"}},{"ping":{"content":"ps:0"}},{"thread":{"thread":"%s","version":"20090904","fork":0,"language":1,"user_id":"","with_global":0,"scores":1,"nicoru":3}},{"ping":{"content":"pf:0"}},{"ping":{"content":"ps:1"}},{"thread_leaves":{"thread":"%s","language":1,"user_id":"","content":"0-6:100,500,nicoru:100","scores":1,"nicoru":3}},{"ping":{"content":"pf:1"}},{"ping":{"content":"rf:0"}}]' ''' % (thread_id, thread_id)
-
-        result = subprocess.run(curl_command, stdout=subprocess.PIPE, shell=True)
-
-        parsed_comment_json = json.loads(result.stdout)
+        comment_json = self._download_json(
+            'https://nmsg.nicovideo.jp/api.json/',
+            video_id,
+            headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; Win64; rv:68.0) Gecko/20100101 Firefox/68.0',
+                'Accept': '*/*',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate',
+                'Referer': 'https://www.nicovideo.jp/watch/sm9',
+                'Content-Type': 'text/plain;charset=UTF-8',
+                'Origin': 'https://www.nicovideo.jp',
+                'Connection': 'keep-alive'
+            },
+            data=('[{"ping":{"content":"rs:0"}},{"ping":{"content":"ps:0"}},{"thread":{"thread":"%s","version":"20090904","fork":0,"language":1,"user_id":"","with_global":0,"scores":1,"nicoru":3}},{"ping":{"content":"pf:0"}},{"ping":{"content":"ps:1"}},{"thread_leaves":{"thread":"%s","language":1,"user_id":"","content":"0-6:100,500,nicoru:100","scores":1,"nicoru":3}},{"ping":{"content":"pf:1"}},{"ping":{"content":"rf:0"}}]' % (thread_id, thread_id)).encode()
+        )
 
         return {
             'id': video_id,
@@ -454,7 +463,7 @@ class NiconicoIE(InfoExtractor):
             'uploader_id': uploader_id,
             'view_count': view_count,
             'comment_count': comment_count,
-            'comments': parsed_comment_json,
+            'comments': comment_json,
             'duration': duration,
             'webpage_url': webpage_url,
         }

@@ -2062,9 +2062,16 @@ class YoutubeDL(object):
 
     @staticmethod
     def filter_requested_info(info_dict):
+        
+        if ('formats' in info_dict):
+            for format in info_dict['formats']:
+                format.pop('heartbeat_url')
+                format.pop('heartbeat_data')
+                format.pop('heartbeat_interval')
+
         return dict(
             (k, v) for k, v in info_dict.items()
-            if k not in ['requested_formats', 'requested_subtitles', 'heartbeat_url', 'heartbeat_data', 'heartbeat_interval'])
+                if k not in ['requested_formats', 'requested_subtitles', 'heartbeat_url', 'heartbeat_data', 'heartbeat_interval'])
 
     def post_process(self, filename, ie_info):
         """Run all the postprocessors on the given file."""
