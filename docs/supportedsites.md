@@ -98,6 +98,8 @@
  - **Bigflix**
  - **Bild**: Bild.de
  - **BiliBili**
+ - **BilibiliAudio**
+ - **BilibiliAudioAlbum**
  - **BioBioChileTV**
  - **BIQLE**
  - **BitChute**
@@ -692,7 +694,6 @@
  - **PornoXO**
  - **PornTube**
  - **PressTV**
- - **PromptFile**
  - **prosiebensat1**: ProSiebenSat.1 Digital
  - **puhutv**
  - **puhutv:serie**
@@ -882,6 +883,7 @@
  - **TeleQuebec**
  - **TeleQuebecEmission**
  - **TeleQuebecLive**
+ - **TeleQuebecSquat**
  - **TeleTask**
  - **Telewebion**
  - **TennisTV**
@@ -989,7 +991,6 @@
  - **VeeHD**
  - **Veoh**
  - **verystream**
- - **Vessel**
  - **Vesti**: Вести.Ru
  - **Vevo**
  - **VevoPlaylist**
@@ -1088,7 +1089,6 @@
  - **Weibo**
  - **WeiboMobile**
  - **WeiqiTV**: WQTV
- - **Wimp**
  - **Wistia**
  - **wnl**: npo.nl, ntr.nl, omroepwnl.nl, zapp.nl and npo3.nl
  - **WorldStarHipHop**
@@ -1100,6 +1100,7 @@
  - **XFileShare**: XFileShare based sites: DaClips, FileHoot, GorillaVid, MovPod, PowerWatch, Rapidvideo.ws, TheVideoBee, Vidto, Streamin.To, XVIDSTAGE, Vid ABC, VidBom, vidlo, RapidVideo.TV, FastVideo.me
  - **XHamster**
  - **XHamsterEmbed**
+ - **XHamsterUser**
  - **xiami:album**: 虾米音乐 - 专辑
  - **xiami:artist**: 虾米音乐 - 歌手
  - **xiami:collection**: 虾米音乐 - 精选集
