@@ -5,6 +5,9 @@ import datetime
 import hashlib
 import json
 import re
+import io
+
+from .niconico import NiconicoIE
 
 from .common import InfoExtractor, SearchInfoExtractor
 from ..compat import (
@@ -222,36 +225,51 @@ class BiliBiliIE(InfoExtractor):
                 'uploader': uploader_mobj.group('name'),
                 'uploader_id': uploader_mobj.group('id'),
             })
+
         if not info.get('uploader'):
             info['uploader'] = self._html_search_meta(
                 'author', webpage, 'uploader', default=None)
 
+        comments = self._get_all_comment_pages(video_id)
+
+        raw_danmaku = self._get_raw_danmaku(video_id)
+        danmaku = NiconicoIE.CreateDanmaku(raw_danmaku, commentType='Bilibili', x=1024, y=576)
+
+        top_level_info = {
+            'raw_danmaku': raw_danmaku,
+            'comments': comments,
+            'comment_count': len(comments),
+        }
+
+        entries[0]['subtitles'] = {
+            'danmaku': [{
+                'ext': 'ass',
+                'data': danmaku
+            }]
+        }
+
         for entry in entries:
             entry.update(info)
 
-        danmaku = self._get_danmaku(video_id)
-        comments = self._get_all_comment_pages(video_id)
-
         if len(entries) == 1:
-            entries[0]["comments"] = comments
-            entries[0]["comment_count"] = len(comments)
-            entries[0]["danmaku"] = danmaku
+            entries[0].update(top_level_info)
             return entries[0]
         else:
             for idx, entry in enumerate(entries):
                 entry['id'] = '%s_part%d' % (video_id, (idx + 1))
 
-
-            return {
+            global_info = {
                 '_type': 'multi_video',
                 'id': video_id,
                 'title': title,
                 'description': description,
                 'entries': entries,
-                'comments': comments,
-                'comment_count': len(comments),
-                'danmaku': danmaku,
             }
+
+            global_info.update(info)
+            global_info.update(top_level_info)
+
+            return global_info
 
     # recursive solution to getting every page of comments for the video
     # we can stop when we reach a page without any comments
@@ -282,7 +300,7 @@ class BiliBiliIE(InfoExtractor):
             id = reply["rpid"]
             text = reply["content"]["message"]
             timestamp = reply["ctime"]
-            parent = reply["parent"]
+            parent = reply["parent"] if reply["parent"] != 0 else 'root'
 
             comment = {
                 "author": author,
@@ -300,7 +318,7 @@ class BiliBiliIE(InfoExtractor):
 
         return ret
 
-    def _get_danmaku(self, video_id):
+    def _get_raw_danmaku(self, video_id):
 
         cid_url = "https://www.bilibili.com/widget/getPageList?aid=%s" % (video_id)
         cid_str = self._download_webpage(cid_url, video_id, note=False)

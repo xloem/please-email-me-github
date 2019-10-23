@@ -468,8 +468,8 @@ class NiconicoIE(InfoExtractor):
         en_raw_comment_list = self._extract_all_comments(video_id, thread_ids, True)
         jp_raw_comment_list = self._extract_all_comments(video_id, thread_ids, False)
         
-        danmaku_content_en = self._create_danmaku(en_raw_comment_list)
-        danmaku_content_jp = self._create_danmaku(jp_raw_comment_list)
+        danmaku_content_en = NiconicoIE.CreateDanmaku(json.dumps(en_raw_comment_list))
+        danmaku_content_jp = NiconicoIE.CreateDanmaku(json.dumps(jp_raw_comment_list))
 
 
         comments = self._process_raw_comments(en_raw_comment_list, root_thread_id, 'en') \
@@ -509,10 +509,11 @@ class NiconicoIE(InfoExtractor):
             'webpage_url': webpage_url,
         }
 
-    def _create_danmaku(self, raw_comments_list):
+    @staticmethod
+    def CreateDanmaku(raw_comments_list, commentType='NiconicoJson', x=640, y=360):
         temp_io = io.StringIO()
-        comment_io = io.StringIO(json.dumps(raw_comments_list))
-        Danmaku2ASS([comment_io], 'NiconicoJson', temp_io, 640, 360)
+        comment_io = io.StringIO(raw_comments_list)
+        Danmaku2ASS([comment_io], commentType, temp_io, x, y)
         danmaku_content = temp_io.getvalue()
 
         temp_io.close()
