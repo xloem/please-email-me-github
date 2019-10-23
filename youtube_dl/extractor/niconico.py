@@ -474,10 +474,6 @@ class NiconicoIE(InfoExtractor):
         comments = self._process_raw_comments(en_raw_comment_list, root_thread_id, 'en') \
                  + self._process_raw_comments(jp_raw_comment_list, root_thread_id, 'jp')
 
-        self._set_cookie('nicovideo.jp', 'watch_flash', '1')
-        webpage, handle = self._download_webpage_handle(
-        'http://www.nicovideo.jp/watch/' + video_id, video_id)
-
         return {
             'id': video_id,
             'title': title,
