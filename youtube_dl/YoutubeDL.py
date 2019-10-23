@@ -2065,9 +2065,12 @@ class YoutubeDL(object):
         
         if ('formats' in info_dict):
             for format in info_dict['formats']:
-                format.pop('heartbeat_url')
-                format.pop('heartbeat_data')
-                format.pop('heartbeat_interval')
+                if ('heartbeat_url' in format):
+                    format.pop('heartbeat_url')
+                if ('heartbeat_data' in format):
+                    format.pop('heartbeat_data')
+                if ('heartbeat_interval' in format):
+                    format.pop('heartbeat_interval')
 
         return dict(
             (k, v) for k, v in info_dict.items()
