@@ -293,6 +293,7 @@ class NiconicoIE(InfoExtractor):
                 if ret:
                     return ret
 
+
         extension = get_video_info('movie_type')
 
         formats = []
@@ -474,6 +475,9 @@ class NiconicoIE(InfoExtractor):
         comments = self._process_raw_comments(en_raw_comment_list, root_thread_id, 'en') \
                  + self._process_raw_comments(jp_raw_comment_list, root_thread_id, 'jp')
 
+        tags_nodes = video_info_xml.findall('.//tags/tag')
+        tags = list(map(lambda x: x.text, tags_nodes))
+
         return {
             'id': video_id,
             'title': title,
@@ -484,6 +488,7 @@ class NiconicoIE(InfoExtractor):
             'timestamp': timestamp,
             'uploader_id': uploader_id,
             'view_count': view_count,
+            'tags': tags,
             'comment_count': comment_count,
             'raw_comments': {
                 'en': en_raw_comment_list,
