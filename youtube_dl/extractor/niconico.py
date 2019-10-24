@@ -348,6 +348,8 @@ class NiconicoIE(InfoExtractor):
                     for video_url in player_flv_info['url']:
                         is_source = not video_url.endswith('low')
 
+                        flash_cookies = self._get_cookies('http://nicovideo.jp')
+
                         formats.append({
                             'url': video_url,
                             'ext': extension,
@@ -355,6 +357,7 @@ class NiconicoIE(InfoExtractor):
                             'format_note': 'Source flash video' if is_source else 'Low quality flash video',
                             'acodec': 'mp3',
                             'container': extension,
+                            'http_headers': {'Cookie': flash_cookies.output(header='', sep=';')},
                             'quality': 10 if is_source else -2
                         })
         

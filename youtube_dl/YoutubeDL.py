@@ -1411,13 +1411,13 @@ class YoutubeDL(object):
     def _calc_headers(self, info_dict):
         res = std_headers.copy()
 
-        add_headers = info_dict.get('http_headers')
-        if add_headers:
-            res.update(add_headers)
-
         cookies = self._calc_cookies(info_dict)
         if cookies:
             res['Cookie'] = cookies
+
+        add_headers = info_dict.get('http_headers')
+        if add_headers:
+            res.update(add_headers)
 
         if 'X-Forwarded-For' not in res:
             x_forwarded_for_ip = info_dict.get('__x_forwarded_for_ip')
