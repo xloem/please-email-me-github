@@ -24,6 +24,7 @@ from ..utils import (
     unified_timestamp,
     urlencode_postdata,
     compat_urllib_parse_unquote_plus,
+    get_element_by_class,
     xpath_text,
 )
 
@@ -595,18 +596,23 @@ class NiconicoPlaylistIE(InfoExtractor):
 
         entries_json = self._search_regex(r'Mylist\.preload\(\d+, (\[.*\])\);',
                                           webpage, 'entries')
-        entries = json.loads(entries_json)
+        entries_raw = json.loads(entries_json)
         entries = [{
             '_type': 'url',
             'ie_key': NiconicoIE.ie_key(),
             'url': ('http://www.nicovideo.jp/watch/%s' %
                     entry['item_data']['video_id']),
-        } for entry in entries]
+        } for entry in entries_raw]
 
         return {
             '_type': 'playlist',
             'title': self._search_regex(r'\s+name: "(.*?)"', webpage, 'title'),
+            'description': self._search_regex(r'\s+description: "(.*?)"', webpage, 'description'),
+            'user_id': self._search_regex(r'\s+user_id: (\d*?)', webpage, 'user_id'),
+            'create_time': self._search_regex(r'\s+create_time: (\d*?)', webpage, 'create_time'),
+            'update_time': self._search_regex(r'\s+update_time: (\d*?)', webpage, 'update_time'),
             'id': list_id,
+            'entries_metadata': entries_raw,
             'entries': entries,
         }
 

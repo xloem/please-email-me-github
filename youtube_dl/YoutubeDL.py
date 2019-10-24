@@ -1012,13 +1012,20 @@ class YoutubeDL(object):
             playlist_filename = self.prepare_filename(ie_result)
 
             if self.params.get('writeinfojson', False):
-                infofn = replace_extension(playlist_filename, 'info.json', ie_result.get('ext'))
+                
+                playlist_info = ie_result
+
+                if result_type == 'playlist':
+                    playlist_info = dict(ie_result)
+                    playlist_info.pop('entries')
+
+                infofn = replace_extension(playlist_filename, 'info.json', playlist_info.get('ext'))
                 if self.params.get('nooverwrites', False) and os.path.exists(encodeFilename(infofn)):
                     self.to_screen('[info] Playlist description metadata is already present')
                 else:
                     self.to_screen('[info] Writing playlist description metadata as JSON to: ' + infofn)
                     try:
-                        write_json_file(self.filter_requested_info(ie_result), infofn)
+                        write_json_file(self.filter_requested_info(playlist_info), infofn)
                     except (OSError, IOError):
                         self.report_error('Cannot write metadata to JSON file ' + infofn)
                         return
