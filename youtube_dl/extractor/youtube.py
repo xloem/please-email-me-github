@@ -2741,6 +2741,10 @@ class YoutubePlaylistIE(YoutubePlaylistBaseInfoExtractor):
             r'(?s)<h1 class="pl-header-title[^"]*"[^>]*>\s*(.*?)\s*</h1>',
             page, 'title', default=None)
 
+        playlist_description = self._html_search_regex(
+            r'(?s)<span class="pl-header-description-text"[^>]*>\s*(.*?)\s*</span>',
+            page, 'description', default=None)
+
         _UPLOADER_BASE = r'class=["\']pl-header-details[^>]+>\s*<li>\s*<a[^>]+\bhref='
         uploader = self._html_search_regex(
             r'%s["\']/(?:user|channel)/[^>]+>([^<]+)' % _UPLOADER_BASE,
@@ -2765,7 +2769,7 @@ class YoutubePlaylistIE(YoutubePlaylistBaseInfoExtractor):
                 has_videos = False
 
         playlist = self.playlist_result(
-            self._entries(page, playlist_id), playlist_id, playlist_title)
+            self._entries(page, playlist_id), playlist_id, playlist_title, playlist_description)
         playlist.update({
             'uploader': uploader,
             'uploader_id': uploader_id,
