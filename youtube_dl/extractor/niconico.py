@@ -571,7 +571,33 @@ class NiconicoIE(InfoExtractor):
                     'Origin': 'https://www.nicovideo.jp',
                     'Connection': 'keep-alive'
                 },
-                data=('[{"ping":{"content":"rs:0"}},{"ping":{"content":"ps:0"}},{"thread":{"thread":"%s","version":"20090904","fork":0,"language":0,"user_id":"","with_global":0,"scores":1,"nicoru":3}},{"ping":{"content":"pf:0"}},{"ping":{"content":"ps:1"}},{"thread_leaves":{"thread":"%s","language":%s,"user_id":"","content":"0-999999:999999,999999,nicoru:100","scores":1,"nicoru":3}},{"ping":{"content":"pf:1"}},{"ping":{"content":"rf:0"}}]' % (thread_id, thread_id, '1' if english else '0')).encode(),
+                data=json.dumps([
+                        { "ping": {"content": "rs:0" } },
+                        { "ping": {"content": "ps:0" } },
+                        { "thread": {
+                            "thread": thread_id,
+                            "version": "20090904",
+                            "fork": 0,
+                            "language": 0,
+                            "user_id": "",
+                            "with_global": 0,
+                            "scores": 1,
+                            "nicoru": 3
+                        }},
+                        { "ping": {"content": "pf:0" } },
+                        { "ping": {"content": "ps:1" } },
+                        { "thread_leaves": {
+                            "thread": thread_id,
+                            "language":' 1' if english else '0',
+                            "user_id": "",
+                            "content": "0-999999:999999,999999", # format is "<bottom of minute range>-<top of minute range>:<comments per minute>,<total last comments"
+                                                                 # unfortunately NND limits (deletes?) comment returns this way, so you're only able to grab the last 1000 per language
+                            "scores": 1,
+                            "nicoru": 3
+                        }},
+                        { "ping": {"content": "pf:1" } },
+                        { "ping": {"content": "rf:0" } }
+                    ]).encode(),
                 note='Downloading comments from thread %s/%s (%s)' % (i, len(thread_ids), 'en' if english else 'jp')
             )
 
