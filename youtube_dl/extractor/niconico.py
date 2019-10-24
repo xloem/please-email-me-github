@@ -274,6 +274,7 @@ class NiconicoIE(InfoExtractor):
             'vbr': float_or_none(video_quality.get('bitrate'), 1000),
             'height': resolution.get('height'),
             'width': resolution.get('width'),
+            'quality': 5,
             'heartbeat_url': heartbeat_url,
             'heartbeat_data': heartbeat_data,
             'heartbeat_interval': heartbeat_interval,
@@ -394,7 +395,7 @@ class NiconicoIE(InfoExtractor):
                 'format_id': 'smile_high' if is_quality else 'smile_low',
                 'format_note': 'High quality smile video' if is_quality else 'Low quality smile video',
                 'container': 'mp4',
-                'quality': 9 if is_quality else -1,
+                'quality': 3 if is_quality else -1,
                 'filesize': int(get_video_info('size_high') if is_quality else get_video_info('size_low'))
             })
             
