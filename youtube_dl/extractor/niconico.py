@@ -478,6 +478,8 @@ class NiconicoIE(InfoExtractor):
         tags_nodes = video_info_xml.findall('.//tags/tag')
         tags = list(map(lambda x: x.text, tags_nodes))
 
+        genre = get_video_info('genre')
+
         return {
             'id': video_id,
             'title': title,
@@ -489,6 +491,7 @@ class NiconicoIE(InfoExtractor):
             'uploader_id': uploader_id,
             'view_count': view_count,
             'tags': tags,
+            'genre': genre,
             'comment_count': comment_count,
             'raw_comments': {
                 'en': en_raw_comment_list,
