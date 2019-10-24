@@ -235,10 +235,15 @@ class BiliBiliIE(InfoExtractor):
         raw_danmaku = self._get_raw_danmaku(video_id)
         danmaku = NiconicoIE.CreateDanmaku(raw_danmaku, commentType='Bilibili', x=1024, y=576)
 
+        raw_tags = self._get_tags(video_id)
+        tags = list(map(lambda x: x['tag_name'], raw_tags))
+
         top_level_info = {
             'raw_danmaku': raw_danmaku,
             'comments': comments,
             'comment_count': len(comments),
+            'tags': tags,
+            'raw_tags': raw_tags,
         }
 
         entries[0]['subtitles'] = {
@@ -328,6 +333,13 @@ class BiliBiliIE(InfoExtractor):
         danmaku = self._download_webpage(danmaku_url, video_id, note='Downloading danmaku comments')
         
         return danmaku
+
+    def _get_tags(self, video_id):
+
+        tags_url = "https://api.bilibili.com/x/tag/archive/tags?aid=%s" % (video_id)
+        tags_json = self._download_json(tags_url, video_id, note='Downloading tags')
+        
+        return tags_json['data']
 
 class BiliBiliBangumiIE(InfoExtractor):
     _VALID_URL = r'https?://bangumi\.bilibili\.com/anime/(?P<id>\d+)'
