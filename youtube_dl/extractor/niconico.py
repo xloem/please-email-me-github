@@ -321,37 +321,41 @@ class NiconicoIE(InfoExtractor):
             watch_api_data_string = self._html_search_regex(
                 r'<div[^>]+id="watchAPIDataContainer"[^>]+>([^<]+)</div>',
                 webpage, 'watch api data', default=None)
-
-            watch_api = json.loads(watch_api_data_string)
-            player_flv_info = compat_parse_qs(compat_urllib_parse_unquote_plus(compat_urllib_parse_unquote_plus(watch_api['flashvars']['flvInfo'])))
-
-            if 'url' not in player_flv_info:
-                if 'deleted' in flv_info:
-                    raise ExtractorError('The video has been deleted.',
-                                         expected=True)
-                elif 'closed' in flv_info:
+            
+            if watch_api_data_string == None:
                     self._downloader.report_warning('Could not get flv info, as it requires logging in')
-                elif 'error' in flv_info:
-                    raise ExtractorError('%s reports error: %s' % (
-                        self.IE_NAME, flv_info['error'][0]), expected=True)
-                else:
-                    raise ExtractorError('Unable to find flv URL')
 
             else:
-                
-                for video_url in player_flv_info['url']:
-                    is_source = not video_url.endswith('low')
 
-                    formats.append({
-                        'url': video_url,
-                        'ext': extension,
-                        'format_id': 'source' if is_source else 'flash_low',
-                        'format_note': 'Source flash video' if is_source else 'Low quality flash video',
-                        'acodec': 'mp3',
-                        'container': extension,
-                        'quality': 10 if is_source else -2,
-                        'filesize': int(get_video_info('size_high') if is_source else get_video_info('size_low')),
-                    })
+                watch_api = json.loads(watch_api_data_string)
+                player_flv_info = compat_parse_qs(compat_urllib_parse_unquote_plus(compat_urllib_parse_unquote_plus(watch_api['flashvars']['flvInfo'])))
+
+                if 'url' not in player_flv_info:
+                    if 'deleted' in flv_info:
+                        raise ExtractorError('The video has been deleted.',
+                                            expected=True)
+                    elif 'closed' in flv_info:
+                        self._downloader.report_warning('Could not get flv info, as it requires logging in')
+                    elif 'error' in flv_info:
+                        raise ExtractorError('%s reports error: %s' % (
+                            self.IE_NAME, flv_info['error'][0]), expected=True)
+                    else:
+                        raise ExtractorError('Unable to find flv URL')
+
+                else:
+                    
+                    for video_url in player_flv_info['url']:
+                        is_source = not video_url.endswith('low')
+
+                        formats.append({
+                            'url': video_url,
+                            'ext': extension,
+                            'format_id': 'source' if is_source else 'flash_low',
+                            'format_note': 'Source flash video' if is_source else 'Low quality flash video',
+                            'acodec': 'mp3',
+                            'container': extension,
+                            'quality': 10 if is_source else -2
+                        })
         
         # Either source video is a mp4 (DMC or smile), or we're grabbing other qualities alongside the flash video
         self._set_cookie('nicovideo.jp', 'watch_flash', '0')
@@ -386,8 +390,8 @@ class NiconicoIE(InfoExtractor):
                 'format_id': 'smile_high' if is_quality else 'smile_low',
                 'format_note': 'High quality smile video' if is_quality else 'Low quality smile video',
                 'container': 'mp4',
-                'quality': 1 if is_quality else -1,
-                'filesize': int(get_video_info('size_high') if is_quality else get_video_info('size_low')) if extension not in ['flv', 'swf'] else None,
+                'quality': 9 if is_quality else -1,
+                'filesize': int(get_video_info('size_high') if is_quality else get_video_info('size_low'))
             })
             
         self._sort_formats(formats)
@@ -477,7 +481,7 @@ class NiconicoIE(InfoExtractor):
 
         tags_nodes = video_info_xml.findall('.//tags/tag')
         tags = list(map(lambda x: x.text, tags_nodes))
-
+        
         genre = get_video_info('genre')
 
         return {
