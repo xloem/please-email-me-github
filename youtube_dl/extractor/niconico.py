@@ -26,6 +26,7 @@ from ..utils import (
     compat_urllib_parse_unquote_plus,
     get_element_by_class,
     xpath_text,
+    xpath_element,
 )
 
 
@@ -697,6 +698,110 @@ class NicovideoIE(SearchInfoExtractor):
             pageNumber += 1
 
         return entries
+
+
+class NiconicoLiveIE(InfoExtractor):
+    _VALID_URL = r'https?://live2?.nicovideo\.jp/watch/(?P<id>lv\d+)'
+
+    _TEST = {} # fuck tests
+
+    def _real_initialize(self):
+        self._login()
+
+    def _login(self):
+        username, password = self._get_login_info()
+        # No authentication to be performed
+        if not username:
+            return True
+
+        # Log in
+        login_ok = True
+        login_form_strs = {
+            'mail_tel': username,
+            'password': password,
+        }
+        urlh = self._request_webpage(
+            'https://account.nicovideo.jp/api/v1/login', None,
+            note='Logging in', errnote='Unable to log in',
+            data=urlencode_postdata(login_form_strs))
+        if urlh is False:
+            login_ok = False
+        else:
+            parts = compat_urlparse.urlparse(urlh.geturl())
+            if compat_parse_qs(parts.query).get('message', [None])[0] == 'cant_login':
+                login_ok = False
+        if not login_ok:
+            self._downloader.report_warning('unable to log in: bad username or password')
+        return login_ok
+
+    def _real_extract(self, url):
+        video_id = self._match_id(url)
+        webpage = self._download_webpage(url, video_id)
+
+        playerstatus_raw = self._search_regex(r'"value_by_gps"\s*:\s*"([^"]+)"',
+                                          webpage, 'entries')
+
+        playerstatus_xml = self._parse_xml(compat_urlparse.unquote(playerstatus_raw), video_id)
+
+        rtmp_url = xpath_text(playerstatus_xml, './rtmp/url')
+        rtmp_ticket = xpath_text(playerstatus_xml, './rtmp/ticket')
+
+        que_sheet_nodes = playerstatus_xml.findall('./stream/quesheet/que')
+        que_sheet = list(map(lambda x: x.text, que_sheet_nodes))
+
+        published_urls = {}
+        raw_formats = {}
+
+        for que in que_sheet:
+            if que.startswith("/publish"):
+                split_publish = que.split(' ')
+                published_urls[split_publish[1]] = split_publish[2]
+            
+            elif que.startswith("/play"):
+                split_play = que.split(' ')[1].split(',')
+
+                for raw_format in split_play:
+                    split_format = raw_format.split(':')
+                    
+                    raw_formats[split_format[0]] = split_format[-1]
+
+
+        title = xpath_text(playerstatus_xml, './stream/title')
+        description = xpath_text(playerstatus_xml, './stream/description')
+        view_count = int(xpath_text(playerstatus_xml, './stream/watch_count'))
+        comment_count = int(xpath_text(playerstatus_xml, './stream/comment_count'))
+        uploader_id = int(xpath_text(playerstatus_xml, './stream/owner_id'))
+
+        timestamp = int(xpath_text(playerstatus_xml, './stream/open_time'))
+        end_time = int(xpath_text(playerstatus_xml, './stream/end_time'))
+        duration = end_time - timestamp
+
+        formats = []
+
+        for raw_format in raw_formats:
+            if raw_format not in ['default', 'premium']:
+                continue
+
+            formats.append({
+                'url': rtmp_url + '/mp4:' + published_urls[raw_formats[raw_format]],
+                'format_id': raw_format,
+                'protocol': 'rtmp',
+                'ext': 'flv',
+                'rtmp_conn': 'S:' + rtmp_ticket
+            })
+
+        return {
+            'id': video_id,
+            'title': title,
+            'formats': formats,
+            'description': description,
+            'timestamp': timestamp,
+            'uploader_id': uploader_id,
+            'view_count': view_count,
+            'comment_count': comment_count,
+            'duration': duration,
+            'webpage_url': url,
+        }
 
 
 
