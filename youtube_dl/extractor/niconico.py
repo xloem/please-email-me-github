@@ -820,16 +820,21 @@ class NiconicoLiveIE(InfoExtractor):
         webpage = self._download_webpage(url, video_id)
 
         embedded_data_raw = self._html_search_regex(r'id\s*=\s*"embedded-data"[^>]*data-props\s*=\s*"([^"]+)"',
-            webpage, 'embedded-data', fatal=False)
+            webpage, 'embedded-data', default=None, fatal=False)
 
         if embedded_data_raw is not None:
             # After March 2019
             # HLS based stream
 
+            self.to_screen('Detected post-March 2019 HLS-based stream')
+
             embedded_data = json.loads(embedded_data_raw)
 
             websocket_url = embedded_data['site']['relive']['webSocketUrl']
             broadcast_id = embedded_data['program']['broadcastId']
+
+            if websocket_url is None or websocket_url == '':
+                raise ExtractorError('Unable to find stream media URL. Is the stream private or unavailable?', expected=True)
 
             q = queue.Queue(maxsize=0)
 
@@ -854,6 +859,8 @@ class NiconicoLiveIE(InfoExtractor):
             # Before March 2019
             # RTMP based stream
 
+            self.to_screen('Detected pre-March 2019 RTMP-based timeshift stream')
+
             playerstatus_raw = self._html_search_regex(r'"value_by_gps"\s*:\s*"([^"]+)"',
                                             webpage, 'entries')
 
@@ -861,6 +868,9 @@ class NiconicoLiveIE(InfoExtractor):
 
             rtmp_url = xpath_text(playerstatus_xml, './rtmp/url')
             rtmp_ticket = xpath_text(playerstatus_xml, './rtmp/ticket')
+
+            if rtmp_url is None or rtmp_url == '':
+                raise ExtractorError('Unable to find stream media URL. Is the stream private or unavailable?', expected=True)
 
             que_sheet_nodes = playerstatus_xml.findall('./stream/quesheet/que')
             que_sheet = list(map(lambda x: x.text, que_sheet_nodes))
@@ -892,14 +902,24 @@ class NiconicoLiveIE(InfoExtractor):
             end_time = int(xpath_text(playerstatus_xml, './stream/end_time'))
             duration = end_time - timestamp
 
+            provider_type = xpath_text(playerstatus_xml, './stream/provider_type')
+
             formats = []
 
             for raw_format in raw_formats:
                 if raw_format not in ['default', 'premium']:
                     continue
 
+                if provider_type in ['channel', 'official']:
+                    url = rtmp_url + '/mp4:' + published_urls[raw_formats[raw_format]]
+                elif provider_type == "community":
+                    raise ExtractorError('Unable to download old timeshift community streams as they require an unfinalized custom build of rtmpdump. (https://github.com/ydixon/rtmpdump-ksv-nicolive/tree/nicolive)', expected=True)
+                else:
+                    raise ExtractorError('Unknown provider type: "%s"' % provider_type, expected=True)
+
+
                 formats.append({
-                    'url': rtmp_url + '/mp4:' + published_urls[raw_formats[raw_format]],
+                    'url': url,
                     'format_id': raw_format,
                     'protocol': 'rtmp',
                     'quality': 10 if raw_format == 'premium' else -1,
