@@ -110,7 +110,7 @@ class RtmpFD(FileDownloader):
         continue_dl = self.params.get('continuedl', True)
 
         self.report_destination(filename)
-        tmpfilename = self.temp_name(filename)
+        tmpfilename = 'rtmp_temp.flv.part'
         test = self.params.get('test', False)
 
         # Check for rtmpdump first

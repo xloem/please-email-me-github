@@ -5,6 +5,10 @@ import json
 import datetime
 import re
 import subprocess
+import asyncio
+import websockets
+import _thread
+import queue
 
 from .common import InfoExtractor, SearchInfoExtractor
 from ..compat import (
@@ -734,74 +738,189 @@ class NiconicoLiveIE(InfoExtractor):
             self._downloader.report_warning('unable to log in: bad username or password')
         return login_ok
 
+    async def stream_heartbeat(self, websocket, watching_frame):
+        while True:
+            await websocket.send(json.dumps(watching_frame))
+            await asyncio.sleep(15)
+
+
+    async def open_stream_websocket(self, uri, broadcast_id, loop, queue):
+
+        async with websockets.connect(uri) as websocket:
+            watching_frame = {
+                "type": "watch",
+                "body": {
+                    "command": "watching",
+                    "params": [
+                        broadcast_id,
+                        "-1",
+                        "0"
+                    ]
+                }
+            }
+
+            watching_frame["body"]["params"][0] = broadcast_id
+
+            permit_frame = {
+                "type": "watch",
+                "body": {
+                    "command": "getpermit",
+                    "requirement": {
+                        "broadcastId": broadcast_id,
+                        "route": "",
+                        "stream": {
+                            "protocol": "hls",
+                            "requireNewStream": True,
+                            "priorStreamQuality": "abr",
+                            "isLowLatency": True,
+                            "isChasePlay": False
+                        },
+                        "room": {
+                            "isCommentable": True,
+                            "protocol": "webSocket"
+                        }
+                    }
+                }
+            }
+            
+            await websocket.send(json.dumps(permit_frame))
+
+            heartbeat = loop.create_task(self.stream_heartbeat(websocket, watching_frame))
+
+            try:
+                while True:
+                    frame = json.loads(await websocket.recv())
+                    frame_type = frame["type"]
+
+                    if frame_type == "watch":
+                        command = frame["body"]["command"]
+
+                        if command == "statistics":
+                            continue
+
+                        elif command == "currentstream":
+                            stream_url = frame["body"]["currentStream"]["uri"]
+                            queue.put(stream_url)
+
+                    elif frame_type == "ping":
+                        await websocket.send("""{"type":"pong","body":{}}""")
+
+            except websockets.exceptions.ConnectionClosed:
+                self.to_screen("Connection was closed. Exiting...")
+                heartbeat.cancel()
+                return
+
+    def start_heartbeat(self, websocket_url, broadcast_id, queue):
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(self.open_stream_websocket(websocket_url, broadcast_id, loop, queue))
+
     def _real_extract(self, url):
         video_id = self._match_id(url)
         webpage = self._download_webpage(url, video_id)
 
-        playerstatus_raw = self._search_regex(r'"value_by_gps"\s*:\s*"([^"]+)"',
-                                          webpage, 'entries')
+        embedded_data_raw = self._html_search_regex(r'id\s*=\s*"embedded-data"[^>]*data-props\s*=\s*"([^"]+)"',
+            webpage, 'embedded-data', fatal=False)
 
-        playerstatus_xml = self._parse_xml(compat_urlparse.unquote(playerstatus_raw), video_id)
+        if embedded_data_raw is not None:
+            # After March 2019
+            # HLS based stream
 
-        rtmp_url = xpath_text(playerstatus_xml, './rtmp/url')
-        rtmp_ticket = xpath_text(playerstatus_xml, './rtmp/ticket')
+            embedded_data = json.loads(embedded_data_raw)
 
-        que_sheet_nodes = playerstatus_xml.findall('./stream/quesheet/que')
-        que_sheet = list(map(lambda x: x.text, que_sheet_nodes))
+            websocket_url = embedded_data['site']['relive']['webSocketUrl']
+            broadcast_id = embedded_data['program']['broadcastId']
 
-        published_urls = {}
-        raw_formats = {}
+            q = queue.Queue(maxsize=0)
 
-        for que in que_sheet:
-            if que.startswith("/publish"):
-                split_publish = que.split(' ')
-                published_urls[split_publish[1]] = split_publish[2]
-            
-            elif que.startswith("/play"):
-                split_play = que.split(' ')[1].split(',')
+            _thread.start_new_thread(self.start_heartbeat, (websocket_url, broadcast_id, q))
 
-                for raw_format in split_play:
-                    split_format = raw_format.split(':')
-                    
-                    raw_formats[split_format[0]] = split_format[-1]
+            playlistUrl = q.get()
+
+            return {
+                'id': video_id,
+                '_type': 'url_transparent',
+                'protocol': 'hls',
+                'url': playlistUrl,
+                'title': embedded_data['program']['title'],
+                'view_count': embedded_data['program']['statistics']['watchCount'],
+                'comment_count': embedded_data['program']['statistics']['commentCount'],
+                'description': embedded_data['program']['description'],
+                'uploader': embedded_data['program']['supplier']['name'],
+                'timestamp': embedded_data['program']['openTime']
+            }
+
+        else:
+            # Before March 2019
+            # RTMP based stream
+
+            playerstatus_raw = self._html_search_regex(r'"value_by_gps"\s*:\s*"([^"]+)"',
+                                            webpage, 'entries')
+
+            playerstatus_xml = self._parse_xml(compat_urlparse.unquote(playerstatus_raw), video_id)
+
+            rtmp_url = xpath_text(playerstatus_xml, './rtmp/url')
+            rtmp_ticket = xpath_text(playerstatus_xml, './rtmp/ticket')
+
+            que_sheet_nodes = playerstatus_xml.findall('./stream/quesheet/que')
+            que_sheet = list(map(lambda x: x.text, que_sheet_nodes))
+
+            published_urls = {}
+            raw_formats = {}
+
+            for que in que_sheet:
+                if que.startswith("/publish"):
+                    split_publish = que.split(' ')
+                    published_urls[split_publish[1]] = split_publish[2]
+                
+                elif que.startswith("/play"):
+                    split_play = que.split(' ')[1].split(',')
+
+                    for raw_format in split_play:
+                        split_format = raw_format.split(':')
+                        
+                        raw_formats[split_format[0]] = split_format[-1]
 
 
-        title = xpath_text(playerstatus_xml, './stream/title')
-        description = xpath_text(playerstatus_xml, './stream/description')
-        view_count = int(xpath_text(playerstatus_xml, './stream/watch_count'))
-        comment_count = int(xpath_text(playerstatus_xml, './stream/comment_count'))
-        uploader_id = int(xpath_text(playerstatus_xml, './stream/owner_id'))
+            title = xpath_text(playerstatus_xml, './stream/title')
+            description = xpath_text(playerstatus_xml, './stream/description')
+            view_count = int(xpath_text(playerstatus_xml, './stream/watch_count'))
+            comment_count = int(xpath_text(playerstatus_xml, './stream/comment_count'))
+            uploader_id = int(xpath_text(playerstatus_xml, './stream/owner_id'))
 
-        timestamp = int(xpath_text(playerstatus_xml, './stream/open_time'))
-        end_time = int(xpath_text(playerstatus_xml, './stream/end_time'))
-        duration = end_time - timestamp
+            timestamp = int(xpath_text(playerstatus_xml, './stream/open_time'))
+            end_time = int(xpath_text(playerstatus_xml, './stream/end_time'))
+            duration = end_time - timestamp
 
-        formats = []
+            formats = []
 
-        for raw_format in raw_formats:
-            if raw_format not in ['default', 'premium']:
-                continue
+            for raw_format in raw_formats:
+                if raw_format not in ['default', 'premium']:
+                    continue
 
-            formats.append({
-                'url': rtmp_url + '/mp4:' + published_urls[raw_formats[raw_format]],
-                'format_id': raw_format,
-                'protocol': 'rtmp',
-                'ext': 'flv',
-                'rtmp_conn': 'S:' + rtmp_ticket
-            })
+                formats.append({
+                    'url': rtmp_url + '/mp4:' + published_urls[raw_formats[raw_format]],
+                    'format_id': raw_format,
+                    'protocol': 'rtmp',
+                    'quality': 10 if raw_format == 'premium' else -1,
+                    'ext': 'flv',
+                    'rtmp_conn': 'S:' + rtmp_ticket
+                })
 
-        return {
-            'id': video_id,
-            'title': title,
-            'formats': formats,
-            'description': description,
-            'timestamp': timestamp,
-            'uploader_id': uploader_id,
-            'view_count': view_count,
-            'comment_count': comment_count,
-            'duration': duration,
-            'webpage_url': url,
-        }
+            self._sort_formats(formats)
+
+            return {
+                'id': video_id,
+                'title': title,
+                'formats': formats,
+                'description': description,
+                'timestamp': timestamp,
+                'uploader_id': uploader_id,
+                'view_count': view_count,
+                'comment_count': comment_count,
+                'duration': duration,
+                'webpage_url': url,
+            }
 
 
 

@@ -864,14 +864,16 @@ class YoutubeDL(object):
             # We have to add extra_info to the results because it may be
             # contained in a playlist
             return self.extract_info(ie_result['url'],
-                                     download,
+                                     download=download,
                                      ie_key=ie_result.get('ie_key'),
                                      extra_info=extra_info)
         elif result_type == 'url_transparent':
             # Use the information from the embedding page
-            info = self.extract_info(
-                ie_result['url'], ie_key=ie_result.get('ie_key'),
-                extra_info=extra_info, download=False, process=False)
+            info = self.extract_info(ie_result['url'],
+                                     ie_key=ie_result.get('ie_key'),
+                                     extra_info=extra_info,
+                                     download=False,
+                                     process=False)
 
             # extract_info may return None when ignoreerrors is enabled and
             # extraction failed with an error, don't crash and return early
@@ -881,7 +883,7 @@ class YoutubeDL(object):
 
             force_properties = dict(
                 (k, v) for k, v in ie_result.items() if v is not None)
-            for f in ('_type', 'url', 'id', 'extractor', 'extractor_key', 'ie_key'):
+            for f in ('_type', 'url', 'extractor', 'extractor_key', 'ie_key'):
                 if f in force_properties:
                     del force_properties[f]
             new_result = info.copy()
