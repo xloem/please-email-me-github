@@ -1,4 +1,30 @@
-[![Build Status](https://travis-ci.org/ytdl-org/youtube-dl.svg?branch=master)](https://travis-ci.org/ytdl-org/youtube-dl)
+Niconico-based fork of youtube-dl
+
+**NOTE: The code in this repo is licensed solely with the condition that any portion of it is not permitted to be used in the main youtube-dl fork.**
+
+General rundown of the features I have added:
+
+- Niconico
+  - Ability to download danmaku/comment subtitles for both bilibili and niconico (use `--write-sub --all-subs`)
+  - Can specify more media formats and (if logged in, on some videos) can get the original quality upload (for niconico)
+  - Fixed niconico cutting out during downloads (heartbeat implementation)
+  - Almost full support for live.nicovideo.jp livestreams (both RTMP and HLS)
+
+- BiliBili
+    - Added supports for comments / subtitle overlays
+    - Added ?p=2 page notation to be able to download multiple videos from a single bilibili link, instead of only being able to download the first one
+
+- Youtube
+  - Added description downloading for youtube playlists
+  
+- General
+  - Enabled playlist metadata being saved separately to media info.json
+  - Fixed issue with RTMP streams and unicode characters on Windows (because it won't be fixed in [#23765](https://github.com/ytdl-org/youtube-dl/issues/23765))
+  - Extractors marked as transparent no longer have their IDs overwritten
+
+
+
+------
 
 youtube-dl - download videos from youtube.com or other video platforms
 
