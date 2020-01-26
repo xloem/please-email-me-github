@@ -4,7 +4,11 @@ from __future__ import unicode_literals
 import re
 
 from .common import InfoExtractor
-from ..compat import compat_str
+from ..compat import (
+    compat_parse_qs,
+    compat_str,
+    compat_urllib_parse_urlparse,
+)
 from ..utils import (
     determine_ext,
     dict_get,
@@ -12,6 +16,7 @@ from ..utils import (
     str_or_none,
     strip_or_none,
     try_get,
+    urljoin,
 )
 
 
