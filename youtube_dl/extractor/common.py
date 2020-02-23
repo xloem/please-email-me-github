@@ -2947,13 +2947,15 @@ class InfoExtractor(object):
 class SearchInfoExtractor(InfoExtractor):
     """
     Base class for paged search queries extractors.
-    They accept URLs in the format _SEARCH_KEY(|all|[0-9]):{query}
+    They accept URLs in the format _SEARCH_KEY(|all|[0-9]|id(video_id)):{query}
     Instances should define _SEARCH_KEY and _MAX_RESULTS.
+    If a video ID is provided for the prefix, the extractor will extract videos until
+    finding that video, then stop.
     """
 
     @classmethod
     def _make_valid_url(cls):
-        return r'%s(?P<prefix>|[1-9][0-9]*|all):(?P<query>[\s\S]+)' % cls._SEARCH_KEY
+        return r'%s(?P<prefix>|[1-9][0-9]*|all|id[a-zA-Z]{2}[1-9][0-9]*):(?P<query>[\s\S]+)' % cls._SEARCH_KEY
 
     @classmethod
     def suitable(cls, url):
@@ -2970,6 +2972,8 @@ class SearchInfoExtractor(InfoExtractor):
             return self._get_n_results(query, 1)
         elif prefix == 'all':
             return self._get_n_results(query, self._MAX_RESULTS)
+        elif prefix.startswith("id"):
+            return self._get_results_until(query, prefix[2:])
         else:
             n = int(prefix)
             if n <= 0:
@@ -2981,6 +2985,10 @@ class SearchInfoExtractor(InfoExtractor):
 
     def _get_n_results(self, query, n):
         """Get a specified number of results for a query"""
+        raise NotImplementedError('This method must be implemented by subclasses')
+
+    def _get_results_until(self, query, last_video):
+        """Extract videos until hitting the video with the specified ID"""
         raise NotImplementedError('This method must be implemented by subclasses')
 
     @property

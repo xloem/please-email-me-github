@@ -654,7 +654,7 @@ class NiconicoPlaylistIE(InfoExtractor):
 # USAGE: youtube-dl "nicosearch<NUMBER OF ENTRIES>:<SEARCH STRING>"
 class NicovideoIE(SearchInfoExtractor):
     IE_DESC = 'Nico video search'
-    _MAX_RESULTS = 100000
+    _MAX_RESULTS = 1000000
     _SEARCH_KEY = 'nicosearch'
 
     def _get_n_results(self, query, n):
@@ -675,6 +675,44 @@ class NicovideoIE(SearchInfoExtractor):
             # finding as many entries as were requested.
             currDate -= datetime.timedelta(days=1)
             if(len(entries) >= n or currDate < datetime.date(2007, 1, 1)):
+                break
+
+        return {
+            '_type': 'playlist',
+            'id': query,
+            'entries': entries
+        }
+
+    def _get_results_until(self, query, last_video):
+        entries = []
+        currDate = datetime.datetime.now().date()
+
+        while True:
+            search_url = "http://www.nicovideo.jp/search/%s" % query
+            r = self._get_entries_for_date(search_url, query, currDate)
+
+            final_index = 100000
+            reached_video = False
+
+            for i in range(len(r)):
+                try:
+                    if(r[i]['url'].split("/")[-1] == last_video):
+                        final_index = i
+                        reached_video = True
+                        break
+                except ValueError:
+                    continue
+
+
+            # if we marked the final index, only add videos until we hit it
+            entries += r[0:min(final_index, len(r))]
+
+
+            # for a given search, nicovideo will show a maximum of 50 pages. My way around this is specifying a date for the search, down to the date, which for the most part
+            # is a guarantee that the number of pages in the search results will not exceed 50. For any given search for a day, we extract everything available, and move on, until
+            # finding as many entries as were requested.
+            currDate -= datetime.timedelta(days=1)
+            if(reached_video or currDate < datetime.date(2007, 1, 1)):
                 break
 
         return {
