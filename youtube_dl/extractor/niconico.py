@@ -501,7 +501,12 @@ class NiconicoIE(InfoExtractor):
             'id': video_id,
             'title': title,
             'formats': formats,
-            'thumbnail': thumbnail,
+            'thumbnails': [
+                {
+                    'url': thumbnail,
+                    'ext': 'jpg'
+                }
+            ],
             'description': description,
             'uploader': uploader,
             'timestamp': timestamp,
