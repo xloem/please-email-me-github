@@ -479,15 +479,18 @@ class NiconicoIE(InfoExtractor):
         root_thread_id = 0 # thread_ids[0]
 
         # make API call
-        en_raw_comment_list = self._extract_all_comments(video_id, thread_ids, True)
-        jp_raw_comment_list = self._extract_all_comments(video_id, thread_ids, False)
+        en_raw_comment_list = self._extract_all_comments(video_id, thread_ids, 1)
+        jp_raw_comment_list = self._extract_all_comments(video_id, thread_ids, 0)
+        cn_raw_comment_list = self._extract_all_comments(video_id, thread_ids, 2)
         
         danmaku_content_en = NiconicoIE.CreateDanmaku(json.dumps(en_raw_comment_list))
         danmaku_content_jp = NiconicoIE.CreateDanmaku(json.dumps(jp_raw_comment_list))
+        danmaku_content_cn = NiconicoIE.CreateDanmaku(json.dumps(cn_raw_comment_list))
 
 
         comments = self._process_raw_comments(en_raw_comment_list, root_thread_id, 'en') \
-                 + self._process_raw_comments(jp_raw_comment_list, root_thread_id, 'jp')
+                 + self._process_raw_comments(jp_raw_comment_list, root_thread_id, 'jp') \
+                 + self._process_raw_comments(cn_raw_comment_list, root_thread_id, 'cn')
 
         tags_nodes = video_info_xml.findall('.//tags/tag')
         tags = list(map(lambda x: x.text, tags_nodes))
@@ -510,6 +513,7 @@ class NiconicoIE(InfoExtractor):
             'raw_comments': {
                 'en': en_raw_comment_list,
                 'jp': jp_raw_comment_list,
+                'cn': cn_raw_comment_list,
             },
             'comments': comments,
             'subtitles': {
@@ -520,6 +524,10 @@ class NiconicoIE(InfoExtractor):
                 'danmaku-jp': [{
                     'ext': 'ass',
                     'data': danmaku_content_jp
+                }],
+                'danmaku-cn': [{
+                    'ext': 'ass',
+                    'data': danmaku_content_cn
                 }]
             },
             'duration': duration,
@@ -559,7 +567,7 @@ class NiconicoIE(InfoExtractor):
         
         return comments
 
-    def _extract_all_comments(self, video_id, thread_ids, english):
+    def _extract_all_comments(self, video_id, thread_ids, language_id):
 
         i = 0
         raw_json = []
@@ -597,7 +605,7 @@ class NiconicoIE(InfoExtractor):
                         { "ping": {"content": "ps:1" } },
                         { "thread_leaves": {
                             "thread": thread_id,
-                            "language": '1' if english else '0',
+                            "language": language_id,
                             "user_id": "",
                             "content": "0-999999:999999,999999", # format is "<bottom of minute range>-<top of minute range>:<comments per minute>,<total last comments"
                                                                  # unfortunately NND limits (deletes?) comment returns this way, so you're only able to grab the last 1000 per language
@@ -607,7 +615,10 @@ class NiconicoIE(InfoExtractor):
                         { "ping": {"content": "pf:1" } },
                         { "ping": {"content": "rf:0" } }
                     ]).encode(),
-                note='Downloading comments from thread %s/%s (%s)' % (i, len(thread_ids), 'en' if english else 'jp')
+                note='Downloading comments from thread %s/%s (%s)' % (i, len(thread_ids), 'en' if language_id == 1 else
+                                                                                          'jp' if language_id == 0 else
+                                                                                          'cn' if language_id == 2 else 
+                                                                                          'unknown')
             )
 
         return raw_json
