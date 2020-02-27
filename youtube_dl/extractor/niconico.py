@@ -267,7 +267,7 @@ class NiconicoIE(InfoExtractor):
         heartbeat_url = session_api_endpoint['url'] + '/' + session_response['data']['session']['id'] + '?_format=json&_method=PUT'
         heartbeat_data = json.dumps(session_response['data']).encode()
         # interval, convert milliseconds to seconds, then halve to make a buffer.
-        heartbeat_interval = session_api_data['heartbeat_lifetime'] / 2000
+        heartbeat_interval = session_api_data['heartbeat_lifetime'] / 8000
 
         resolution = video_quality.get('resolution', {})
 
@@ -597,7 +597,7 @@ class NiconicoIE(InfoExtractor):
                         { "ping": {"content": "ps:1" } },
                         { "thread_leaves": {
                             "thread": thread_id,
-                            "language":' 1' if english else '0',
+                            "language": '1' if english else '0',
                             "user_id": "",
                             "content": "0-999999:999999,999999", # format is "<bottom of minute range>-<top of minute range>:<comments per minute>,<total last comments"
                                                                  # unfortunately NND limits (deletes?) comment returns this way, so you're only able to grab the last 1000 per language
@@ -880,11 +880,11 @@ class NiconicoLiveIE(InfoExtractor):
 
             playlistUrl = q.get()
 
+            formats = self._extract_m3u8_formats(playlistUrl, video_id)
+
             return {
                 'id': video_id,
-                '_type': 'url_transparent',
-                'protocol': 'hls',
-                'url': playlistUrl,
+                'formats': formats,
                 'title': embedded_data['program']['title'],
                 'view_count': embedded_data['program']['statistics']['watchCount'],
                 'comment_count': embedded_data['program']['statistics']['commentCount'],
