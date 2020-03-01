@@ -992,7 +992,7 @@ class YoutubeDL(object):
                     'playlist_title': ie_result.get('title'),
                     'playlist_uploader': ie_result.get('uploader'),
                     'playlist_uploader_id': ie_result.get('uploader_id'),
-                    'playlist_index': i + playliststart,
+                    'playlist_index': playlistitems[i - 1] if playlistitems else i + playliststart,
                     'extractor': ie_result['extractor'],
                     'webpage_url': ie_result['webpage_url'],
                     'webpage_url_basename': url_basename(ie_result['webpage_url']),
@@ -2433,7 +2433,7 @@ class YoutubeDL(object):
             thumb_ext = determine_ext(t['url'], 'jpg')
             suffix = '_%s' % t['id'] if len(thumbnails) > 1 else ''
             thumb_display_id = '%s ' % t['id'] if len(thumbnails) > 1 else ''
-            t['filename'] = thumb_filename = os.path.splitext(filename)[0] + suffix + '.' + thumb_ext
+            t['filename'] = thumb_filename = os.path.splitext(filename)[0] + suffix + '.' + (t.get('ext') or thumb_ext)
 
             if self.params.get('nooverwrites', False) and os.path.exists(encodeFilename(thumb_filename)):
                 self.to_screen('[%s] %s: Thumbnail %sis already present' %
