@@ -656,26 +656,21 @@ class NicovideoIE(SearchInfoExtractor):
     IE_DESC = 'Nico video search'
     _MAX_RESULTS = 1000000
     _SEARCH_KEY = 'nicosearch'
+    _START_DATE = datetime.date(2007, 1, 1)
+    _MAX_NUMBER_OF_PAGES = 50
+    _RESULTS_PER_PAGE = 32
 
     def _get_n_results(self, query, n):
         """Get a specified number of results for a query"""
         entries = []
         currDate = datetime.datetime.now().date()
 
-        while True:
-            search_url = "http://www.nicovideo.jp/search/%s" % query
-            r = self._get_entries_for_date(search_url, query, currDate)
+        search_url = "http://www.nicovideo.jp/search/%s" % query
+        r = self._get_entries_for_span(search_url, query, self._START_DATE, currDate)
 
-            # did we gather more entries in the last few pages than were asked for? If so, only add as many as are needed to reach the desired number.
-            m = n - len(entries)
-            entries += r[0:min(m, len(r))]
-
-            # for a given search, nicovideo will show a maximum of 50 pages. My way around this is specifying a date for the search, down to the date, which for the most part
-            # is a guarantee that the number of pages in the search results will not exceed 50. For any given search for a day, we extract everything available, and move on, until
-            # finding as many entries as were requested.
-            currDate -= datetime.timedelta(days=1)
-            if(len(entries) >= n or currDate < datetime.date(2007, 1, 1)):
-                break
+        # did we gather more entries than were asked for? If so, only add as many as are needed to reach the desired number.
+        m = n - len(entries)
+        entries += r[0:min(m, len(r))]
 
         return {
             '_type': 'playlist',
@@ -687,33 +682,21 @@ class NicovideoIE(SearchInfoExtractor):
         entries = []
         currDate = datetime.datetime.now().date()
 
-        while True:
-            search_url = "http://www.nicovideo.jp/search/%s" % query
-            r = self._get_entries_for_date(search_url, query, currDate)
+        search_url = "http://www.nicovideo.jp/search/%s" % query
+        r = self._get_entries_for_date(search_url, query, self._START_DATE, currDate)
 
-            final_index = 100000
-            reached_video = False
+        final_index = self._MAX_RESULTS
 
-            for i in range(len(r)):
-                try:
-                    if(r[i]['url'].split("/")[-1] == last_video):
-                        final_index = i
-                        reached_video = True
-                        break
-                except ValueError:
-                    continue
+        for i in range(len(r)):
+            try:
+                if(r[i]['url'].split("/")[-1] == last_video):
+                    final_index = i
+                    break
+            except ValueError:
+                continue
 
-
-            # if we marked the final index, only add videos until we hit it
-            entries += r[0:min(final_index, len(r))]
-
-
-            # for a given search, nicovideo will show a maximum of 50 pages. My way around this is specifying a date for the search, down to the date, which for the most part
-            # is a guarantee that the number of pages in the search results will not exceed 50. For any given search for a day, we extract everything available, and move on, until
-            # finding as many entries as were requested.
-            currDate -= datetime.timedelta(days=1)
-            if(reached_video or currDate < datetime.date(2007, 1, 1)):
-                break
+        # if we marked the final index, only add videos until we hit it
+        entries += r[0:min(final_index, len(r))]
 
         return {
             '_type': 'playlist',
@@ -721,11 +704,25 @@ class NicovideoIE(SearchInfoExtractor):
             'entries': entries
         }
 
-    def _get_entries_for_date(self, url, query, date, pageNumber=1):
+    def _get_entries_for_span(self, url, query, startDate, endDate):
+        # divide and conquer
+        entries = self._get_entries_for_date(url, query, startDate, endDate=endDate)
+        if (len(entries) >= self._MAX_NUMBER_OF_PAGES * self._RESULTS_PER_PAGE and startDate != endDate):
+            midpoint = startDate + (endDate - startDate)/2
+            right = self._get_entries_for_span(url, query, startDate, midpoint)
+            left = self._get_entries_for_span(url, query, midpoint, endDate)
+            entries = left + right
+
+        return entries
+
+    def _get_entries_for_date(self, url, query, startDate, endDate=None, pageNumber=1):
+        if endDate is None:
+            endDate = startDate
+
+        entries = []
         while True:
-            link = url + "?page=" + str(pageNumber) + "&start=" + str(date) + "&end=" + str(date)
-            results = self._download_webpage(link, "None", query={"Search_key": query}, note='Extracting results from page %s for date %s' % (pageNumber, date))
-            entries = []
+            link = url + "?page=" + str(pageNumber) + "&start=" + str(startDate) + "&end=" + str(endDate) + "&sort=f&order=d"
+            results = self._download_webpage(link, "None", query={"Search_key": query}, note='Extracting results from page %s for date %s to %s' % (pageNumber, startDate, endDate))
             r = re.findall(r'(?<=data-video-id=)["\']?(?P<videoid>.*?)(?=["\'])', results)
 
             for item in r:
@@ -734,7 +731,7 @@ class NicovideoIE(SearchInfoExtractor):
 
             # each page holds a maximum of 32 entries. If we've seen 32 entries on the current page,
             # it's possible there may be another, so we can check. It's a little awkward, but it works.
-            if(len(r) < 32):
+            if(len(r) < self._RESULTS_PER_PAGE):
                 break
 
             pageNumber += 1
