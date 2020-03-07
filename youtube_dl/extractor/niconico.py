@@ -721,15 +721,20 @@ class NicovideoIE(SearchInfoExtractor):
         }
 
     def _get_entries_for_span(self, url, query, startDate, endDate):
-        # divide and conquer
-        entries = self._get_entries_for_date(url, query, startDate, endDate=endDate)
-        if (len(entries) >= self._MAX_NUMBER_OF_PAGES * self._RESULTS_PER_PAGE and startDate != endDate):
+        # This page 50 request will be duplicated in the else case; not ideal
+        page_50_results = self._get_entries_for_date(url, query, startDate, endDate=endDate, pageNumber=50)
+        entries = []
+        # If the page 50 results return 32 videos, we need to break down the query interval to ensure we've captured all videos
+        if (len(page_50_results) == self._RESULTS_PER_PAGE and startDate != endDate):
             midpoint = startDate + (endDate - startDate)/2
             right = self._get_entries_for_span(url, query, startDate, midpoint)
             left = self._get_entries_for_span(url, query, midpoint, endDate)
             entries = left + right
+        else:
+            entries = self._get_entries_for_date(url, query, startDate, endDate=endDate)
 
         return entries
+
 
     def _get_entries_for_date(self, url, query, startDate, endDate=None, pageNumber=1):
         if endDate is None:
@@ -747,7 +752,7 @@ class NicovideoIE(SearchInfoExtractor):
 
             # each page holds a maximum of 32 entries. If we've seen 32 entries on the current page,
             # it's possible there may be another, so we can check. It's a little awkward, but it works.
-            if(len(r) < self._RESULTS_PER_PAGE):
+            if(len(r) < self._RESULTS_PER_PAGE or pageNumber == self._MAX_NUMBER_OF_PAGES):
                 break
 
             pageNumber += 1
