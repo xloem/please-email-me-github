@@ -37,9 +37,11 @@ class BiliBiliIE(InfoExtractor):
                             (?:
                                 video/[aA][vV]|
                                 anime/(?P<anime_id>\d+)/play\#
-                            )(?P<id_bv>\d+)(?:/?\?p=(?P<page>\d+))?|
-                            video/[bB][vV](?P<id>[^/?#&]+)(?:/?\?p=(?P<page>\d+))?
+                            )(?P<id_bv>\d+)
+                            |
+                            video/[bB][vV](?P<id>[^/?#&]+)
                         )
+                        (?:/?\?p=(?P<page>\d+))?
                     '''
 
     _TESTS = [{
