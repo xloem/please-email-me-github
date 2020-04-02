@@ -29,7 +29,18 @@ from ..utils import (
 
 
 class BiliBiliIE(InfoExtractor):
-    _VALID_URL = r'https?://(?:www\.|bangumi\.|)bilibili\.(?:tv|com)/(?:video/av|anime/(?P<anime_id>\d+)/play#)(?P<id>\d+)(?:/?\?p=(?P<page>\d+))?'
+    _VALID_URL = r'''(?x)
+                    https?://
+                        (?:(?:www|bangumi)\.)?
+                        bilibili\.(?:tv|com)/
+                        (?:
+                            (?:
+                                video/[aA][vV]|
+                                anime/(?P<anime_id>\d+)/play\#
+                            )(?P<id_bv>\d+)(?:/?\?p=(?P<page>\d+))?|
+                            video/[bB][vV](?P<id>[^/?#&]+)(?:/?\?p=(?P<page>\d+))?
+                        )
+                    '''
 
     _TESTS = [{
         'url': 'http://www.bilibili.tv/video/av1074402/',
@@ -97,6 +108,10 @@ class BiliBiliIE(InfoExtractor):
                 'skip_download': True,  # Test metadata only
             },
         }]
+    }, {
+        # new BV video id format
+        'url': 'https://www.bilibili.com/video/BV1JE411F741',
+        'only_matching': True,
     }]
 
     _APP_KEY = 'iVGUTjsxvpLeuDCf'
@@ -114,7 +129,7 @@ class BiliBiliIE(InfoExtractor):
         url, smuggled_data = unsmuggle_url(url, {})
 
         mobj = re.match(self._VALID_URL, url)
-        video_id = mobj.group('id')
+        video_id = mobj.group('id') or mobj.group('id_bv')
         anime_id = mobj.group('anime_id')
         page_id = mobj.group('page')
         webpage = self._download_webpage(url, video_id)
@@ -558,3 +573,17 @@ class BilibiliAudioAlbumIE(BilibiliAudioBaseIE):
                     entries, am_id, album_title, album_data.get('intro'))
 
         return self.playlist_result(entries, am_id)
+
+
+class BiliBiliPlayerIE(InfoExtractor):
+    _VALID_URL = r'https?://player\.bilibili\.com/player\.html\?.*?\baid=(?P<id>\d+)'
+    _TEST = {
+        'url': 'http://player.bilibili.com/player.html?aid=92494333&cid=157926707&page=1',
+        'only_matching': True,
+    }
+
+    def _real_extract(self, url):
+        video_id = self._match_id(url)
+        return self.url_result(
+            'http://www.bilibili.tv/video/av%s/' % video_id,
+            ie=BiliBiliIE.ie_key(), video_id=video_id)

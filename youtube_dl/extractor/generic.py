@@ -2287,7 +2287,7 @@ class GenericIE(InfoExtractor):
 
         if head_response is not False:
             # Check for redirect
-            new_url = compat_str(head_response.geturl())
+            new_url = head_response.geturl()
             if url != new_url:
                 self.report_following_redirect(new_url)
                 if force_videoid:
@@ -2387,12 +2387,12 @@ class GenericIE(InfoExtractor):
                 return self.playlist_result(
                     self._parse_xspf(
                         doc, video_id, xspf_url=url,
-                        xspf_base_url=compat_str(full_response.geturl())),
+                        xspf_base_url=full_response.geturl()),
                     video_id)
             elif re.match(r'(?i)^(?:{[^}]+})?MPD$', doc.tag):
                 info_dict['formats'] = self._parse_mpd_formats(
                     doc,
-                    mpd_base_url=compat_str(full_response.geturl()).rpartition('/')[0],
+                    mpd_base_url=full_response.geturl().rpartition('/')[0],
                     mpd_url=url)
                 self._sort_formats(info_dict['formats'])
                 return info_dict
@@ -2535,6 +2535,11 @@ class GenericIE(InfoExtractor):
         if dailymail_urls:
             return self.playlist_from_matches(
                 dailymail_urls, video_id, video_title, ie=DailyMailIE.ie_key())
+
+        # Look for Teachable embeds, must be before Wistia
+        teachable_url = TeachableIE._extract_url(webpage, url)
+        if teachable_url:
+            return self.url_result(teachable_url)
 
         # Look for embedded Wistia player
         wistia_urls = WistiaIE._extract_urls(webpage)
@@ -3140,10 +3145,6 @@ class GenericIE(InfoExtractor):
         if peertube_urls:
             return self.playlist_from_matches(
                 peertube_urls, video_id, video_title, ie=PeerTubeIE.ie_key())
-
-        teachable_url = TeachableIE._extract_url(webpage, url)
-        if teachable_url:
-            return self.url_result(teachable_url)
 
         indavideo_urls = IndavideoEmbedIE._extract_urls(webpage)
         if indavideo_urls:
