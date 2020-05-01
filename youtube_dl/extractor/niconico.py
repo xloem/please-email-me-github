@@ -474,23 +474,46 @@ class NiconicoIE(InfoExtractor):
         uploader = get_video_info(['ch_name', 'user_nickname']) or owner.get('nickname')
 
         # Get the comments
-        # first need to get the thread ID from the html
-        thread_ids = list(set(re.findall(r'threadIds&quot;:\[{&quot;id&quot;:([0-9]*)', webpage)))
-        root_thread_id = 0 # thread_ids[0]
+        get_comments : bool = self._downloader.params.get('getcomments', False)
+        write_subs : bool = self._downloader.params.get('writesubtitles', False)
 
-        # make API call
-        en_raw_comment_list = self._extract_all_comments(video_id, thread_ids, 1)
-        jp_raw_comment_list = self._extract_all_comments(video_id, thread_ids, 0)
-        cn_raw_comment_list = self._extract_all_comments(video_id, thread_ids, 2)
-        
-        danmaku_content_en = NiconicoIE.CreateDanmaku(json.dumps(en_raw_comment_list))
-        danmaku_content_jp = NiconicoIE.CreateDanmaku(json.dumps(jp_raw_comment_list))
-        danmaku_content_cn = NiconicoIE.CreateDanmaku(json.dumps(cn_raw_comment_list))
+        raw_comments : dict = None
+        comments : dict = None
+        subtitles : dict = None
 
 
-        comments = self._process_raw_comments(en_raw_comment_list, root_thread_id, 'en') \
-                 + self._process_raw_comments(jp_raw_comment_list, root_thread_id, 'jp') \
-                 + self._process_raw_comments(cn_raw_comment_list, root_thread_id, 'cn')
+        if get_comments or write_subs:
+            # first need to get the thread ID from the html
+            thread_ids = list(set(re.findall(r'threadIds&quot;:\[{&quot;id&quot;:([0-9]*)', webpage)))
+            root_thread_id = 0 # thread_ids[0]
+
+            # make API calls
+            raw_comments = {
+                'en': self._extract_all_comments(video_id, thread_ids, 1),
+                'jp': self._extract_all_comments(video_id, thread_ids, 0),
+                'cn': self._extract_all_comments(video_id, thread_ids, 2),
+            }
+            
+            subtitles = {
+                'danmaku-en': [{
+                    'ext': 'ass',
+                    'data': NiconicoIE.CreateDanmaku(json.dumps(raw_comments['en']))
+                }],
+                'danmaku-jp': [{
+                    'ext': 'ass',
+                    'data': NiconicoIE.CreateDanmaku(json.dumps(raw_comments['jp']))
+                }],
+                'danmaku-cn': [{
+                    'ext': 'ass',
+                    'data': NiconicoIE.CreateDanmaku(json.dumps(raw_comments['cn']))
+                }]
+            }
+
+            comments = self._process_raw_comments(raw_comments['en'], root_thread_id, 'en') \
+                    + self._process_raw_comments(raw_comments['jp'], root_thread_id, 'jp') \
+                    + self._process_raw_comments(raw_comments['cn'], root_thread_id, 'cn')
+
+
 
         tags_nodes = video_info_xml.findall('.//tags/tag')
         tags = list(map(lambda x: x.text, tags_nodes))
@@ -515,26 +538,9 @@ class NiconicoIE(InfoExtractor):
             'tags': tags,
             'genre': genre,
             'comment_count': comment_count,
-            'raw_comments': {
-                'en': en_raw_comment_list,
-                'jp': jp_raw_comment_list,
-                'cn': cn_raw_comment_list,
-            },
+            'raw_comments': raw_comments,
             'comments': comments,
-            'subtitles': {
-                'danmaku-en': [{
-                    'ext': 'ass',
-                    'data': danmaku_content_en
-                }],
-                'danmaku-jp': [{
-                    'ext': 'ass',
-                    'data': danmaku_content_jp
-                }],
-                'danmaku-cn': [{
-                    'ext': 'ass',
-                    'data': danmaku_content_cn
-                }]
-            },
+            'subtitles': subtitles,
             'duration': duration,
             'webpage_url': webpage_url,
         }
@@ -762,6 +768,8 @@ class NicovideoIE(SearchInfoExtractor):
 
 class NiconicoLiveIE(InfoExtractor):
     _VALID_URL = r'https?://live2?.nicovideo\.jp/watch/(?P<id>lv\d+)'
+    
+    _NETRC_MACHINE = 'niconico'
 
     _TEST = {} # fuck tests
 

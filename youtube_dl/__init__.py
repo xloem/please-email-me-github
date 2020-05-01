@@ -368,6 +368,7 @@ def _real_main(argv=None):
         'updatetime': opts.updatetime,
         'writedescription': opts.writedescription,
         'writeannotations': opts.writeannotations,
+        'getcomments': opts.getcomments,
         'writeinfojson': opts.writeinfojson,
         'writethumbnail': opts.writethumbnail,
         'write_all_thumbnails': opts.write_all_thumbnails,
