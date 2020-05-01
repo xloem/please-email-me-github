@@ -2,10 +2,12 @@ Niconico-based fork of youtube-dl
 
 **NOTE: The code in this repo is licensed solely with the condition that any portion of it is not permitted to be used in the main youtube-dl fork.**
 
+
 General rundown of the features I have added:
 
 - Niconico
   - Ability to download danmaku/comment subtitles for both bilibili and niconico (use `--write-sub --all-subs`)
+  - Comment data support for NicoNico in info.json (use `--get-comments`)
   - Can specify more media formats and (if logged in, on some videos) can get the original quality upload (for niconico)
   - Fixed niconico cutting out during downloads (heartbeat implementation)
   - Almost full support for live.nicovideo.jp livestreams (both RTMP and HLS)
