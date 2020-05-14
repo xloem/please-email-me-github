@@ -1,14 +1,17 @@
 Niconico-based fork of youtube-dl
 
-**NOTE: The code in this repo is licensed solely with the condition that any portion of it is not permitted to be used in the main youtube-dl fork.**
+**LICENSING NOTE:**
+
+**All code in this project is licensed solely with the condition that any portion of it is not permitted to be used in the main youtube-dl fork, either directly or indirectly.**
+**It is also not permitted to be used in any project that contains contributions from either remitamine or dstftw.**
 
 
 General rundown of the features I have added:
 
 - Niconico
   - Ability to download danmaku/comment subtitles for both bilibili and niconico (use `--write-sub --all-subs`)
-  - Comment data support for NicoNico in info.json (use `--get-comments`)
-  - Can specify more media formats and (if logged in, on some videos) can get the original quality upload (for niconico)
+  - Can specify more media formats and (if logged in, on some videos) can get the original quality upload (such as .swf files)
+  - Comment data support for NicoNico
   - Fixed niconico cutting out during downloads (heartbeat implementation)
   - Almost full support for live.nicovideo.jp livestreams (both RTMP and HLS)
   - Ability to download content by tag. Usage: `youtube-dl "nicosearch<desired number of results>:<tag value>"`. Example: `youtube-dl "nicosearch100:ytpmv"` will download the 100 latest videos tagged as YTPMV on niconico.
@@ -18,13 +21,18 @@ General rundown of the features I have added:
     - Added ?p=2 page notation to be able to download multiple videos from a single bilibili link, instead of only being able to download the first one
 
 - Youtube
-  - Added description downloading for youtube playlists
+  - Added description metadata for youtube playlists
+  - Added support for downloading comments
   
 - General
   - Enabled playlist metadata being saved separately to media info.json
   - Fixed issue with RTMP streams and unicode characters on Windows (because it won't be fixed in [#23765](https://github.com/ytdl-org/youtube-dl/issues/23765))
   - Extractors marked as transparent no longer have their IDs overwritten
 
+
+**Note:** Since comments can take a significantly long time to scrape, for NicoNico and Youtube, you must pass a `--get-comments` flag to initiate scraping.
+
+For NicoNico however, this flag is implied when you specify `--write-sub`.
 
 
 ------
@@ -251,6 +259,8 @@ Alternatively, refer to the [developer instructions](#developer-instructions) fo
                                      aria2c,avconv,axel,curl,ffmpeg,httpie,wget
     --external-downloader-args ARGS  Give these arguments to the external
                                      downloader
+    --get-comments                   Downloads comments for extractors that do not
+                                     automatically scrape comments
 
 ## Filesystem Options:
     -a, --batch-file FILE            File containing URLs to download ('-' for

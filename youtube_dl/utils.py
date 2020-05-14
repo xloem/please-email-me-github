@@ -2594,11 +2594,15 @@ class YoutubeDLHandler(compat_urllib_request.HTTPHandler):
         if url != url_escaped:
             req = update_Request(req, url=url_escaped)
 
-        for h, v in std_headers.items():
+        original_headers = req.headers.copy()
+
+        req.headers.clear()
+
+        for h, v in itertools.chain(original_headers.items(), std_headers.items()):
             # Capitalize is needed because of Python bug 2275: http://bugs.python.org/issue2275
             # The dict keys are capitalized because of this bug by urllib
-            if h.capitalize() not in req.headers:
-                req.add_header(h, v)
+            if h.title() not in req.headers:
+                req.headers[h.title()] = v
 
         req.headers = handle_youtubedl_headers(req.headers)
 
@@ -2723,9 +2727,9 @@ class YoutubeDLHTTPSHandler(compat_urllib_request.HTTPSHandler):
             conn_class = make_socks_conn_class(conn_class, socks_proxy)
             del req.headers['Ytdl-socks-proxy']
 
-        return self.do_open(functools.partial(
-            _create_http_connection, self, conn_class, True),
-            req, **kwargs)
+        p = functools.partial(_create_http_connection, self, conn_class, True)
+
+        return self.do_open(p, req, **kwargs)
 
 
 class YoutubeDLCookieJar(compat_cookiejar.MozillaCookieJar):
