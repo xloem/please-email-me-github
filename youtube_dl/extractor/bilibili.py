@@ -35,11 +35,11 @@ class BiliBiliIE(InfoExtractor):
                         bilibili\.(?:tv|com)/
                         (?:
                             (?:
-                                video/[aA][vV]|
+                                video/av|
                                 anime/(?P<anime_id>\d+)/play\#
-                            )(?P<id_bv>\d+)
+                            )(?P<id>\d+)
                             |
-                            video/[bB][vV](?P<id>[^/?#&]+)
+                            video/(?:bv|BV)(?P<id_bv>[^/?#&]+)
                         )
                         (?:/?\?p=(?P<page>\d+))?
                     '''
@@ -131,7 +131,11 @@ class BiliBiliIE(InfoExtractor):
         url, smuggled_data = unsmuggle_url(url, {})
 
         mobj = re.match(self._VALID_URL, url)
-        video_id = mobj.group('id') or mobj.group('id_bv')
+        video_id = mobj.group('id_bv') or mobj.group('id')
+
+        av_id, bv_id = self._get_video_id_set(video_id, mobj.group('id_bv') is not None)
+        video_id = av_id
+
         anime_id = mobj.group('anime_id')
         page_id = mobj.group('page')
         webpage = self._download_webpage(url, video_id)
@@ -288,6 +292,7 @@ class BiliBiliIE(InfoExtractor):
             global_info = {
                 '_type': 'multi_video',
                 'id': video_id,
+                'bv_id': bv_id,
                 'title': title,
                 'description': description,
                 'entries': entries,
@@ -297,6 +302,27 @@ class BiliBiliIE(InfoExtractor):
             global_info.update(top_level_info)
 
             return global_info
+
+    def _get_video_id_set(self, id, is_bv):
+
+        if is_bv:
+            query = {'bvid': id}
+        else:
+            query = {'aid': id}
+
+        response = self._download_json("http://api.bilibili.cn/x/web-interface/view",
+            id,
+            note='Grabbing original ID via API',
+            query=query)
+
+        if response['code'] == -400:
+            raise ExtractorError('Video ID does not exist', expected=True, video_id=id)
+
+        if response['code'] != 0:
+            raise ExtractorError('Unknown error occurred during API check (code %s)' % response['code'], expected=True, video_id=id)
+        
+        return (response['data']['aid'], response['data']['bvid'])
+        
 
     # recursive solution to getting every page of comments for the video
     # we can stop when we reach a page without any comments
