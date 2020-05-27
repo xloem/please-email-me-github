@@ -753,7 +753,7 @@ class NicovideoIE(SearchInfoExtractor):
             r = re.findall(r'(?<=data-video-id=)["\']?(?P<videoid>.*?)(?=["\'])', results)
 
             for item in r:
-                e = self.url_result("http://www.nicovideo.jp/watch/" + item, 'Niconico')
+                e = self.url_result("http://www.nicovideo.jp/watch/" + item, 'Niconico', item)
                 entries.append(e)
 
             # each page holds a maximum of 32 entries. If we've seen 32 entries on the current page,
