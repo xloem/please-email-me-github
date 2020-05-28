@@ -487,7 +487,7 @@ class BiliBiliSearchIE(SearchInfoExtractor):
 
             videos = parsed_json["data"]["result"]
             for video in videos:
-                e = self.url_result(video["arcurl"], 'BiliBili', video["aid"])
+                e = self.url_result(video["arcurl"], 'BiliBili', str(video["aid"]))
                 entries.append(e)
 
             if(len(entries) >= n or len(videos) >= BiliBiliSearchIE.MAX_NUMBER_OF_RESULTS):
