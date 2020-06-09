@@ -422,7 +422,8 @@ class NiconicoIE(InfoExtractor):
         video_detail = watch_api_data.get('videoDetail', {})
 
         thumbnail = (
-            get_video_info(['thumbnail_url', 'thumbnailURL'])
+            self._html_search_regex(r'<meta property="og:image" content="([^"]+)">', webpage, 'thumbnail data', default=None)
+            or get_video_info(['largeThumbnailURL', 'thumbnail_url', 'thumbnailURL'])
             or self._html_search_meta('image', webpage, 'thumbnail', default=None)
             or video_detail.get('thumbnail'))
 
