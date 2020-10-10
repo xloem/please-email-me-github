@@ -384,11 +384,21 @@ class FFmpegEmbedSubtitlePP(FFmpegPostProcessor):
             return [], information
 
         filename = information['filepath']
+        input_filename = filename
+
+        if self._downloader.params.get('merge_output_format') is not None:
+            filename = replace_extension(filename, self._downloader.params['merge_output_format'])
+
+            information['filepath'] = filename
+            information['ext'] = self._downloader.params['merge_output_format']
+        
+        
 
         ext = information['ext']
         sub_langs = []
         sub_filenames = []
         webm_vtt_warn = False
+        mp4_ass_warn = False
 
         for lang, sub_info in subtitles.items():
             sub_ext = sub_info['ext']
@@ -400,10 +410,14 @@ class FFmpegEmbedSubtitlePP(FFmpegPostProcessor):
                     webm_vtt_warn = True
                     self._downloader.to_screen('[ffmpeg] Only WebVTT subtitles can be embedded in webm files')
 
+            if not mp4_ass_warn and ext == 'mp4' and sub_ext == 'ass':
+                mp4_ass_warn = True
+                self._downloader.to_screen('[ffmpeg] ASS subtitles cannot be properly embedded in mp4 files; expect issues')
+
         if not sub_langs:
             return [], information
 
-        input_files = [filename] + sub_filenames
+        input_files = [input_filename] + sub_filenames
 
         opts = [
             '-map', '0',
@@ -425,7 +439,7 @@ class FFmpegEmbedSubtitlePP(FFmpegPostProcessor):
         temp_filename = prepend_extension(filename, 'temp')
         self._downloader.to_screen('[ffmpeg] Embedding subtitles in \'%s\'' % filename)
         self.run_ffmpeg_multiple_files(input_files, temp_filename, opts)
-        os.remove(encodeFilename(filename))
+        os.remove(encodeFilename(input_filename))
         os.rename(encodeFilename(temp_filename), encodeFilename(filename))
 
         return sub_filenames, information
