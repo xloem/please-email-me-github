@@ -496,15 +496,15 @@ class NiconicoIE(InfoExtractor):
             }
             
             subtitles = {
-                'danmaku-en': [{
+                'eng': [{
                     'ext': 'ass',
                     'data': NiconicoIE.CreateDanmaku(json.dumps(raw_comments['en']))
                 }],
-                'danmaku-jp': [{
+                'jpn': [{
                     'ext': 'ass',
                     'data': NiconicoIE.CreateDanmaku(json.dumps(raw_comments['jp']))
                 }],
-                'danmaku-cn': [{
+                'zh': [{
                     'ext': 'ass',
                     'data': NiconicoIE.CreateDanmaku(json.dumps(raw_comments['cn']))
                 }]
