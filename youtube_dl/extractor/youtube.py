@@ -2126,7 +2126,7 @@ class YoutubeIE(YoutubeBaseInfoExtractor):
 
                 if first_continuation:
                     
-                    expected_video_comment_count = int(item_section['header']['commentsHeaderRenderer']['countText']['runs'][0]['text'].replace(' Comments', '').replace(',', ''))
+                    expected_video_comment_count = int(item_section['header']['commentsHeaderRenderer']['countText']['runs'][0]['text'].replace(' Comments', '').replace('1 Comment', '1').replace(',', ''))
 
                     first_continuation = False
 
