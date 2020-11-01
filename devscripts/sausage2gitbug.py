@@ -1,8 +1,27 @@
 #!/usr/bin/env python3
 
+# active-goal is listed here, immediately below this line <-
+
+# -> when adding a comment to a bug, we'll want a way to check if it is already added
+
+# github object id prefixes (not event id) by json part:
+# owner: 04:User
+# user: 04:User
+# member: 04:User
+# issue: 05:Issue
+# labels[]: 05:Label (yes, same number as issue)
+# license: 07:License
+# forkee: 010:Repository
+# repo: 010:Repository
+# pull_request: 011:PullRequest
+# comment: 012:IssueComment
+# comment: 024:PullRequestReviewComment
+
 import argparse
+import base64
 from dataclasses import dataclass
 import dateutil.parser
+import functools
 import json
 import os
 import subprocess
@@ -33,9 +52,11 @@ def run(cmd, *args, replies = None, path = None):
 		print(buf.decode(), value)
 		del replies[key]
 	for line in proc.stdout:
+		if proc.poll():
+			break
 		yield line[:-1].decode()
 	if proc.wait():
-		print(text.decode())
+		print(proc.stdout.read().decode())
 		raise subprocess.CalledProcessError(proc.returncode, proc.args)
 
 # we'd like to use it in with
@@ -59,6 +80,7 @@ class User:
 	email : str
 	avatar : str
 	json : str
+	githubid : str
 	hash : str = None
 
 @dataclass
@@ -67,10 +89,12 @@ class Bug:
 	body : str
 	user : str
 	time : int
+	status: str
 	githuburl : str
-	#githubid : str
 	json : str
+	githubid : str
 	hash : str = None
+	modtime : int = 0
 
 @dataclass
 class StatusChange:
@@ -101,6 +125,10 @@ class Users:
 				print(line)
 				raise KeyError('duplicate user', login)
 			self.namemappings[login] = hash
+	def adopt(self, user):
+		if user in self:
+			user = self[user]
+		run('git bug user adopt', user.hash, path = self.path)
 	def __getitem__(self, login):
 		if login is None:
 			login = 'unknown'
@@ -117,6 +145,7 @@ class Users:
 			*run('git bug user --field email', hash, path = self.path),
 			*run('git bug user --field avatarUrl', hash, path = self.path),
 			metadata['gharchive-json'],
+			metadata['github-id'],
 			*run('git bug user --field id', hash, path = self.path)
 		)
 		return user
@@ -134,6 +163,7 @@ class Users:
 					'--email', user.email,
 					'--avatar', user.avatar,
 					'--metadata', 'github-login=' + user.login,
+					'--metadata', 'github-id=' + user.githubid,
 					'--metadatafile', 'gharchive-json=' + jsonfilename,
 					path = self.path
 				)][-1]
@@ -152,19 +182,54 @@ class Bugs:
 			urlparts = bug['metadata']['github-url'].split('/')
 			number = int(urlparts[-1])
 			self.bugmappings[number] = hash
+	def setstatus(self, bug, time, status, json):
+		if bug in self.bugmappings:
+			bug = self.bugmappings[bug]
+		if isinstance(bug, Bug):
+			bug = bug.hash
+		with string2tempfn(json) as jsonfilename:
+			run(
+				'git bug status', status,
+				bug,
+				'--time', time,
+				'--metadatafile', 'gharchive-json=' + jsonfilename,
+				path = self.path
+			)
+	def addcomment(self, bug, time, message, githubid, githuburl, json):
+		if bug in self.bugmappings:
+			bug = self.bugmappings[bug]
+		if isinstance(bug, Bug):
+			bug = bug.hash
+		with string2tempfn(json) as jsonfilename, string2tempfn(message) as messagefilename:
+			run(
+				'git bug comment add',
+				bug,
+				'--time', time,
+				'--file', messagefilename,
+				'--metadata', 'github-url=' + githuburl,
+				'--metadata', 'github-id=' + githubid,
+				'--metadata', 'origin=github',
+				'--metadatafile', 'gharchive-json=' + jsonfilename,
+				path = self.path
+			)
 	def __getitem__(self, number):
 		hash = self.bugmappings[number]
 		bug = json.loads('\n'.join(run('git bug show --format json', hash, path = self.path)))
-		metadata = [*run('git bug show --field metadata', hash, path = self.path)]
+		metadata = [*run('git bug show --field creationMetadata', hash, path = self.path)]
 		metadata = {k:v for k,v in zip(metadata[0::2],metadata[1::2])}
+		if not 'github-id' in metadata:
+			metadata['github-id'] = None
 		return Bug(
 			bug['title'],
 			bug['comments'][0]['message'],
 			bug['author']['id'],
 			bug['create_time']['timestamp'],
+			bug['status'],
 			metadata['github-url'],
 			metadata['gharchive-json'],
-			bug['id']
+			metadata['github-id'],
+			bug['id'],
+			bug['edit_time']['timestamp']
 		)
 	def __contains__(self, number):
 		return number in self.bugmappings
@@ -172,31 +237,26 @@ class Bugs:
 		if number in self.bugmappings:
 			raise KeyError('duplicate bug', bug)
 		if not bug.hash:
-			run('git bug user adopt', bug.user, path = self.path)
+			usermap.adopt(bug.user)
 			with string2tempfn(bug.json) as jsonfilename, string2tempfn(bug.body) as bodyfilename:
-				bug.hash = [*run(
+				args = [
 					'git bug add',
 					'--title', bug.title,
 					'--file', bodyfilename,
 					'--time', int(bug.time.timestamp()),
 					'--metadata', 'github-url=' + bug.githuburl,
+					'--metadata', 'github-id=' + bug.githubid,
 					'--metadata', 'origin=github',
-					#'--metadata', 'github-id=' + bug.githubid,
 					'--metadatafile', 'gharchive-json=' + jsonfilename,
+				]
+				bug.hash = [*run(
+					*args,
 					path = self.path
 				)][-1].split(' ',1)[0]
 		self.bugmappings[number] = bug.hash
 
-class StatusChanges:
-	def __init__(self, path = None):
-		if path is None:
-			path = os.curdir
-		self.path = path
-		self.changemappings = {}
-
 usermap = Users()
 bugmap = Bugs()
-statuschangemap = StatusChanges()
 #issuemap = {}
 eventmap = {}
 
@@ -207,6 +267,8 @@ args = parser.parse_args()
 
 def parsedate(item):
 	return dateutil.parser.isoparse(item.replace('/','-').replace(' -','-').replace(' +','+'))
+def id2githubid(type, id):
+	return base64.b64encode(bytes(type + str(id), 'utf-8')).decode()
 
 class EventsDir:
 	def __init__(self, dir):
@@ -214,11 +276,10 @@ class EventsDir:
 		self.filenames = [*os.listdir(self.dir)]
 		if len(self.filenames):
 			print('WARNING: this is just a work in progress and may make new issues and users in your git-bug repository every time it is run.')
-			input('ctrl-c to cancel, enter to continue?')
 		self.filenames.sort()
 		self.filecount = len(self.filenames)
 	def __iter__(self):
-		lasttime = None
+		lastevent = None
 		filenum = 0
 		# so we take two files
 		# sort them together
@@ -233,26 +294,33 @@ class EventsDir:
 			if nextfilename:
 				with open(os.path.join(self.dir,nextfilename)) as nextfile:
 					events.extend([{'json': line[:-1], **json.loads(line)} for line in nextfile.readlines()])
-			events.sort(key = lambda event: parsedate(event['created_at']))
+			def eventcmp(a, b):
+				if 'id' in a and 'id' in b:
+					a, b = (int(e['id']) for e in (a, b))
+				else:
+					a, b = (parsedate(e['created_at']) for e in (a, b))
+				return (a > b) - (a < b)
+			events.sort(key = functools.cmp_to_key(eventcmp))
 			events = events[:cutoff]
 
 			eventcount = len(events)
 			eventnum = 0
 			for event in events:
 				eventnum += 1
-				time = parsedate(event['created_at'])
-				if lasttime is not None:
-					if time < lasttime:
-						raise AssertionError('out of order events', filename, 'previous:', lasttime, 'now:', time)
 				self.mutate_event(event)
+				if lastevent is not None:
+					if eventcmp(event, lastevent) < 0:
+						raise AssertionError('out of order events', filename, 'previous:', (lastevent['id'],lastevent['created_at']), 'now:', (event['id'],event['created_at']))
 				event['fileprogress'] = int((filenum + eventnum / eventcount)*1000)/1000
 				yield event
-				lasttime = time
+				lastevent = event
 			filenum += 1
 	def mutate_event(self, event):
 		if 'actor_attributes' in event:
 			event['actor'] = event['actor_attributes']
 			del event['actor_attributes']
+		# payload issue has a 'user' field sometimes, which contains node_id of user
+		# it could be merged with actor to get node_id, dunno
 		event['actor'] = self.translate_actor(event['actor'])
 		if 'payload' in event:
 			event['payload'] = self.translate_payload(event['payload'])
@@ -260,10 +328,13 @@ class EventsDir:
 			del event['repo']
 		if 'repository' in event:
 			del event['repository']
+		event['created_at_datetime'] = parsedate(event['created_at'])
 	def translate_actor(self, actor):
 		if not isinstance(actor, dict):
 			return { 'login': 'actor' }
 		actor = {**actor}
+		if 'node_id' not in actor and 'id' in actor:
+			actor['node_id'] = id2githubid('04:User', actor['id'])
 		if not 'avatar_url' in actor:
 			if 'gravatar_id' in actor:
 				actor['avatar_url'] = 'https://gravatar.com/avatar/' + actor['gravatar_id']
@@ -272,9 +343,17 @@ class EventsDir:
 		return actor
 	def translate_payload(self, payload):
 		payload = {**payload}
-		if 'number' not in payload:
-			if 'issue' in payload:
-				payload['number'] = payload['issue']['number']
+		if 'issue' in payload and isinstance(payload['issue'], dict):
+			issue = payload['issue']
+			if 'number' not in issue and 'number' in payload:
+				issue['number'] = payload['number']
+			if 'node_id' not in issue and 'id' in issue:
+				issue['node_id'] = id2githubid('05:Issue', issue['id'])
+		if 'comment' in payload and isinstance(payload['comment'], dict):
+			comment = payload['comment']
+			if 'node_id' not in comment and 'id' in comment and 'issue' in payload:
+				comment['node_id'] = id2githubid('012:IssueComment', comment['id'])
+			
 		return payload
 		
 events = EventsDir(args.dir)
@@ -282,7 +361,7 @@ events = EventsDir(args.dir)
 # first import users so they can be referenced in bugs
 # this just scrapes the actor field for users right now.  add more fields as needed.
 
-def importuserdetails(events):
+def importusers(events):
 	with tqdm(total=events.filecount,desc='json files, new user details',unit='file') as progress:
 		for event in events:
 			actor = event['actor']
@@ -294,7 +373,8 @@ def importuserdetails(events):
 						actor['name'],
 						actor['email'],
 						actor['avatar_url'],
-						event['json']
+						event['json'],
+						actor['node_id']
 					)
 			progress.update(event['fileprogress'] - progress.n)
 	with tqdm(total=events.filecount,desc='json files, new user summaries',unit='file') as progress:
@@ -311,34 +391,54 @@ def importuserdetails(events):
 					actor['name'],
 					actor['email'],
 					actor['avatar_url'],
-					event['json']
+					event['json'],
+					actor['node_id']
 				)
 			progress.update(event['fileprogress'] - progress.n)
 
 def importevent(event, events):
+	created_at_timestamp = int(event['created_at_datetime'].timestamp())
+	payload = event['payload']
+	if 'issue' in payload:
+		ghbug = payload['issue']
+		number = ghbug['number']
+		ghbug_new = number not in bugmap
+		if ghbug_new:
+			# this creates the bug if not created
+			raise Exception("we're passing open/closed state but it's not being used yet.  probably only want to pass it if it's not being set the same; might make sense to set it afterwards instead of passing it, doesn't really matter.")
+			bug = Bug(
+				ghbug['title'],
+				ghbug['body'],
+				usermap[ghbug['user']['login']].hash,
+				int(parsedate(ghbug['created_at']).timestamp()),
+				'open',
+				ghbug['url'],
+				ghevent['json'],
+				ghbug['node_id']
+			)
+			bugmap[number] = bug
+			if ghbug['state'] == 'open':
+				pass
+			elif ghbug['state'] == 'closed':
+				if payload['action'] != 'closed':
+					bugmap.setstatus(bug, int(parsedate(ghbug['closed_at']).timestamp()), 'closed', ghevent['json'])
+			else:
+				raise Exception("not sure what state " + ghbug['state'] + " is")
+		else:
+			bug = bugmap[number]
 	if event['type'] == 'IssuesEvent':
-		payload = event['payload']
-		if payload['action'] == 'opened': # opened is different from created
-			bug = payload['issue']
-			number = bug['number']
-			if number not in bugmap:
-				# this creates the bug if not created
-				bug = Bug(
-					bug['title'],
-					bug['body'],
-					usermap[bug['user']['login']].hash,
-					parsedate(bug['created_at']),
-					bug['url'],
-					event['json']
-				)
-				bugmap[number] = bug
-			# now we open the bug
-		
-			bug.hash
-			
-			payload['issue']
+		# open and close are different from create
+		if payload['action'] == 'opened' or payload['action'] == 'closed':
+			state = {'opened':'open','closed':'closed'}[payload['action']]
+			change = {'opened':'open','closed':'close'}[payload['action']]
+			if created_at_timestamp < bug.modtime or bug.status == state:
+				return
+			usermap.adopt(event['actor']['login'])
+			bugmap.setstatus(bug, created_at_timestamp, change, event['json'])
+	elif event['type'] == 'IssueCommentEvent':
+		# add comment to issue
 		#if event[
-		#pass
+		pass
 	raise Exception(event)
 		
 	
@@ -351,7 +451,7 @@ except Exception as e:
 	event=e.args[0]
 	del event['json']
 	print(event)
-importuserdetails(events)
+importusers(events)
 sys.exit(0)
 
 # args.dir
