@@ -248,8 +248,8 @@ class Users:
 		hash = self.namemappings[login]
 		metadata = [*run('git bug user --field metadata', hash, path = self.path)]
 		metadata = {k:v for k,v in zip(metadata[0::2],metadata[1::2])}
-		if 'gharchive-json' not in metadata:
-			raise Exception('json not found in metadata',login,metadata)
+		if 'gharchive-json' not in metadata or 'github-id' not in metadata:
+			raise Exception('missing field in metadata',login,metadata)
 		user = User(
 			*run('git bug user --field login', hash, path = self.path),
 			*run('git bug user --field name', hash, path = self.path),
@@ -261,10 +261,17 @@ class Users:
 		)
 		return user
 	def __contains__(self, login):
+		"""you can also get the login information using the github api
+		import github
+		githubapi = github.API(username='username', password='password')
+		githubapi.get_user('login')
+		"""
 		return login in self.namemappings
 	def __setitem__(self, login, user):
 		if login in self.namemappings:
 			raise KeyError('duplicate user', login)
+		if not user.githubid:
+			raise Except('nogihubid', user)
 		if not user.hash:
 			with string2tempfn(user.json) as jsonfilename:
 				user.hash = [*run(
@@ -346,11 +353,12 @@ class Bugs:
 
 	#def lamport(self, bug):
 	#	return self.bugmappings[bug].lamport
-	def doevent(self, bug, time, event, githuburl, json, githubid, body = ''):
+	def doevent(self, bug, user, time, event, githuburl, json, githubid, body = ''):
 		if bug in self.bugmappings:
 			bug = self.bugmappings[bug].hash
 		if isinstance(bug, Bug):
 			bug = bug.hash
+		usermap.adopt(user)
 		with string2tempfn(json) as jsonfilename, string2tempfn(body) as bodyfilename:
 			metadata = [
 				'--time', time,
@@ -458,7 +466,7 @@ def importusers(events):
 			actor = event['actor']
 			login = actor['login']
 			if login not in usermap:
-				if 'name' in actor and 'email' in actor:
+				if 'name' in actor and 'email' in actor and 'node_id' in actor:
 					usermap[login] = User(
 						login,
 						actor['name'],
@@ -477,6 +485,8 @@ def importusers(events):
 					actor['name'] = ''
 				if 'email' not in actor:
 					actor['email'] = ''
+				if 'node_id' not in actor:
+					continue
 				usermap[login] = User(
 					login,
 					actor['name'],
@@ -533,8 +543,11 @@ def importevent(event, events):
 	raise Exception(event)
 		
 
+importusers(events)
 try:
-	for bugnumber, bugevents in tqdm(bugmap.bugcache.items()):
+	for bugnumber, bugevents in tqdm(bugmap.bugcache.items(), desc='importing issues+prs', unit='bug'):
+		bugevents = [events.from_fileref(bugevent) for bugevent in bugevents]
+		print(bugevents[0])
 		if bugevents[0]['type'] != 'IssuesEvent' or bugevents[0]['payload']['action'] != 'opened':
 			for event in bugevents:
 				print(bugnumber, event)
@@ -545,7 +558,6 @@ try:
 		# accumulate all the bug details, so it can be made in one go.
 		
 		ghbug = bugevents[0]['payload']['issue']
-		# ADD METADATA
 		bug = Bug(
 			ghbug['title'],
 			ghbug['body'],
@@ -557,26 +569,30 @@ try:
 			ghbug['node_id']
 		)
 		bugmapevents = []
-		if ghbug['state'] == 'open':
-			pass
-		elif ghbug['state'] == 'closed':
-			if bugevents[0]['payload']['action'] == 'closed':
-				pass
-			elif bugevents[0]['payload']['action'] == 'opened':
-				# ADD USER
-				bugmapevents.append((parsedate(ghbug['closed_at']).timestamp(), 'close', ghbug['json']))
+		#if ghbug['state'] == 'open':
+		#	pass
+		#elif ghbug['state'] == 'closed':
+		#	if bugevents[0]['payload']['action'] == 'closed':
+		#		pass
+		#	elif bugevents[0]['payload']['action'] == 'opened':
+		#		# ADD USER
+		#		bugmapevents.append((parsedate(ghbug['closed_at']).timestamp(), 'close', ghbug['json']))
 
-			else:
-				raise Exception('not sure what state ' + bugevents[0]['payload']['action'] + ' is')
-		else:
-			raise Exception('not sure what state ' + ghbug['state'] + ' is')
-
+		#	else:
+		#		raise Exception('not sure what state ' + bugevents[0]['payload']['action'] + ' is')
+		#else:
+		#	raise Exception('not sure what state ' + ghbug['state'] + ' is')
 		for bugevent in bugevents:
+			raise Exception(bugevent)
+			user = bugevent['actor']['login']
+			
 			# we could run into an issue, unknown.  look at bugs afterwards to make sure are correct.
 			if bugevent['payload']['action'] in ('closed','opened'):
 				# status event
 				#bugmapevents.append((parsedate(ghbug[
 				pass
+			del bugevent['created_at_datetime']
+			print(json.dumps(bugevent,indent=2))
 		break
 	#with tqdm(total=events.filecount,desc='json files, events',unit='file') as progress:
 	#	for event in events:
@@ -585,8 +601,8 @@ try:
 except Exception as e:
 	event=e.args[0]
 	del event['json']
-	print(event)
-importusers(events)
+	del event['created_at_datetime']
+	print(json.dumps(event,indent=2))
 sys.exit(0)
 
 # args.dir
