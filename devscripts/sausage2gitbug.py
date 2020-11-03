@@ -31,7 +31,124 @@ import tempfile
 print('this uses xloem\'s fork of git-bug that lets manual details be supplied')
 print('https://github.com/xloem/git-bug/tree/manual-details\n')
 
-# NEXT: load all users first, since they can be referred to before their details are available
+def parsedate(item):
+	return dateutil.parser.isoparse(item.replace('/','-').replace(' -','-').replace(' +','+'))
+def id2githubid(type, id):
+	return base64.b64encode(bytes(type + str(id), 'utf-8')).decode()
+
+class string2tempfn:
+	def __init__(self, data):
+		with tempfile.NamedTemporaryFile('w',delete=False) as file:
+			file.write(data)
+			self.filename = file.name
+	def __enter__(self):
+		return self.filename
+	def __exit__(self, *args):
+		os.remove(self.filename)
+
+class EventsDir:
+	def __init__(self, dir):
+		self.dir = dir
+		self.filenames = [*os.listdir(self.dir)]
+		if len(self.filenames):
+			print('WARNING: this is just a work in progress and may make new issues and users in your git-bug repository every time it is run.')
+		self.filenames.sort()
+		self.filecount = len(self.filenames)
+	def __iter__(self):
+		lastevent = None
+		filenum = 0
+		# so we take two files
+		# sort them together
+		# and then process only 1 file's length
+		for filename, nextfilename in zip(self.filenames, (*self.filenames[1:],None)):
+			# two files are sorted together
+			# and then only data equivalent in length to the first file kept
+			# this is a way to handle things possibly being out of order
+			filenames = [filename]
+			if nextfilename:
+				filenames.append(nextfilename)
+			eventcount = 0
+			events = []
+			for filename in filenames:
+				import itertools
+				with open(os.path.join(self.dir,filename), 'rb') as file:
+					events.extend([
+						{
+							'json': line[:-1].decode('utf-8'),
+							'fileref': (filename, adjustedoffset - len(b'{}')),
+							**json.loads(line)
+						} for adjustedoffset, line in
+							itertools.accumulate(file.readlines(), lambda last, next: (last[0] + len(last[1]), next), initial=(0,b'{}'))
+					][1:])
+				if eventcount == 0:
+					eventcount = len(events)
+			def eventcmp(a, b):
+				if 'id' in a and 'id' in b:
+					a, b = (int(e['id']) for e in (a, b))
+				else:
+					a, b = (parsedate(e['created_at']) for e in (a, b))
+				return (a > b) - (a < b)
+			events.sort(key = functools.cmp_to_key(eventcmp))
+			events = events[:eventcount]
+
+			eventnum = 0
+			for event in events:
+				eventnum += 1
+				self.mutate_event(event)
+				if lastevent is not None:
+					if eventcmp(event, lastevent) < 0:
+						raise AssertionError('out of order events', filename, 'previous:', (lastevent['id'],lastevent['created_at']), 'now:', (event['id'],event['created_at']))
+				event['fileprogress'] = int((filenum + eventnum / eventcount)*1000)/1000
+				yield event
+				lastevent = event
+			filenum += 1
+	def from_fileref(self, fileref):
+		with open(os.path.join(self.dir, fileref[0])) as file:
+			file.seek(fileref[1])
+			line = file.readline()
+			event = {'json': line[:-1], 'fileref': fileref, **json.loads(line)}
+			self.mutate_event(event)
+			return event
+	def mutate_event(self, event):
+		if 'actor_attributes' in event:
+			event['actor'] = event['actor_attributes']
+			del event['actor_attributes']
+		# payload issue has a 'user' field sometimes, which contains node_id of user
+		# it could be merged with actor to get node_id, dunno
+		event['actor'] = self.translate_actor(event['actor'])
+		if 'payload' in event:
+			event['payload'] = self.translate_payload(event['payload'])
+		if 'repo' in event:
+			del event['repo']
+		if 'repository' in event:
+			del event['repository']
+		event['created_at_datetime'] = parsedate(event['created_at'])
+	def translate_actor(self, actor):
+		if not isinstance(actor, dict):
+			return { 'login': 'actor' }
+		actor = {**actor}
+		if 'node_id' not in actor and 'id' in actor:
+			actor['node_id'] = id2githubid('04:User', actor['id'])
+		if not 'avatar_url' in actor:
+			if 'gravatar_id' in actor:
+				actor['avatar_url'] = 'https://gravatar.com/avatar/' + actor['gravatar_id']
+			else:
+				actor['avatar_url'] = ''
+		return actor
+	def translate_payload(self, payload):
+		payload = {**payload}
+		if 'issue' in payload and isinstance(payload['issue'], dict):
+			issue = payload['issue']
+			if 'number' not in issue and 'number' in payload:
+				issue['number'] = payload['number']
+			if 'node_id' not in issue and 'id' in issue:
+				issue['node_id'] = id2githubid('05:Issue', issue['id'])
+		if 'comment' in payload and isinstance(payload['comment'], dict):
+			comment = payload['comment']
+			if 'node_id' not in comment and 'id' in comment and 'issue' in payload:
+				comment['node_id'] = id2githubid('012:IssueComment', comment['id'])
+			
+		return payload
 
 def run(cmd, *args, replies = None, path = None):
 	try:
@@ -59,18 +176,10 @@ def run(cmd, *args, replies = None, path = None):
 		print(proc.stdout.read().decode())
 		raise subprocess.CalledProcessError(proc.returncode, proc.args)
 
-# we'd like to use it in with
-# so, we would return NamedTemporaryFile?
-## no, that makes it close.  we want it to delete.
-class string2tempfn:
-	def __init__(self, data):
-		with tempfile.NamedTemporaryFile('w',delete=False) as file:
-			file.write(data)
-			self.filename = file.name
-	def __enter__(self):
-		return self.filename
-	def __exit__(self, *args):
-		os.remove(self.filename)
+parser = argparse.ArgumentParser()
+parser.add_argument("dir", help="folder containing only gharchive newline-delimited .json files")
+args = parser.parse_args()
+events = EventsDir(args.dir)
 	
 
 @dataclass
@@ -112,6 +221,8 @@ class Users:
 		userlines = run('git bug user ls', path = self.path)
 		# there's a bug here where 2 bogus users are read on first
 		# run.  haven't looked at it.
+		#   this is likely output from clearing locks and building caches.
+		#   throwing out improper lines might fix it
 		userlines = [*userlines]
 		if len(userlines) == 2:
 			print('is this the bug?', userlines)
@@ -169,22 +280,97 @@ class Users:
 				)][-1]
 		self.namemappings[user.login] = user.hash
 
+# the plan is to import the bugs in order.
+# each event is associated with a bug.
+# for each bug, we'll want to find all the events in it.
+# so, we can form an index.
+# a file could be nice.  but let's just iterate over everything to make hte index.
+# we can make a file if it's slow.
+
+# the event index can be a list of files and line numbers, for each bug
+# so a map of bug id to file and line number array
+
 class Bugs:
-	def __init__(self, path = None):
+	@dataclass
+	class gitbugmapping:
+		hash : str
+		lamport : int = -1
+	def __init__(self, events, path = None):
 		if path is None:
 			path = os.curdir
 		self.path = path
 		self.bugmappings = {}
-		# likely to be too slow
+		# likely to be too slow?  oh because all the json is together, loaded into memory in python .. hmm ...
 		bugs = json.loads('\n'.join(run('git bug ls --format json', path = self.path)))
 		for bug in tqdm(bugs, "Mapping imported bugs", unit='bug'):
 			hash = bug['id']
+			lamport = bug['edit_time']['lamport']
 			urlparts = bug['metadata']['github-url'].split('/')
 			number = int(urlparts[-1])
-			self.bugmappings[number] = hash
+			self.bugmappings[number] = Bugs.gitbugmapping(hash, lamport)
+		self.bugcache = {}
+		idtonumber = {}
+		with tqdm(total=events.filecount,desc='caching bug locations',unit='file') as progress:
+			for event in events:
+				number = -1
+				if event['type'] in ('WatchEvent', 'ForkEvent', 'PushEvent', 'CreateEvent', 'CommitCommentEvent', 'MemberEvent', 'DownloadEvent', 'DeleteEvent', 'ReleaseEvent'):
+					number = 'NonBug'
+				if 'payload' in event:
+					payload = event['payload']
+					if 'number' in payload:
+						number = payload['number']
+						if 'issue' in payload and type(payload['issue']) is int:
+							idtonumber[payload['issue']] = number
+					elif 'pull_request' in payload or 'issue' in payload:
+						issue = payload['issue'] if 'issue' in payload else payload['pull_request']
+						if 'number' in issue:
+							number = issue['number']
+							idtonumber[issue['id']] = number
+					elif 'issue_id' in payload and payload['issue_id'] in idtonumber:
+						number = idtonumber[payload['issue_id']]
+				if number == -1 and 'url' in event:
+					url = event['url']
+					if '#' in url:
+						url = url[:url.find('#')]
+					try:
+						number = int(url[url.rfind('/')+1:])
+					except ValueError:
+						pass
+				if number == -1:
+					del event['created_at_datetime']
+					raise Exception(json.dumps(event, indent=2))
+				if number not in self.bugcache:
+					self.bugcache[number] = []
+				self.bugcache[number].append(event['fileref'])
+				progress.update(event['fileprogress'] - progress.n)
+
+	#def lamport(self, bug):
+	#	return self.bugmappings[bug].lamport
+	def doevent(self, bug, time, event, githuburl, json, githubid, body = ''):
+		if bug in self.bugmappings:
+			bug = self.bugmappings[bug].hash
+		if isinstance(bug, Bug):
+			bug = bug.hash
+		with string2tempfn(json) as jsonfilename, string2tempfn(body) as bodyfilename:
+			metadata = [
+				'--time', time,
+				'--metadata', 'github-url=' + githuburl,
+				'--metadata', 'github-id=' + githubid,
+				'--metadata', 'origin=github',
+				'--metadatafile', 'gharchive-json=' + jsonfilename
+			]
+			if event == 'open' or event == 'close':
+				run(
+					'git bug status', event,
+					*metadata,
+					bug,
+					path = self.path
+				)
+			else:
+				raise Exception('unknown', event)
 	def setstatus(self, bug, time, status, json):
 		if bug in self.bugmappings:
-			bug = self.bugmappings[bug]
+			bug = self.bugmappings[bug].hash
 		if isinstance(bug, Bug):
 			bug = bug.hash
 		with string2tempfn(json) as jsonfilename:
@@ -213,7 +399,8 @@ class Bugs:
 				path = self.path
 			)
 	def __getitem__(self, number):
-		hash = self.bugmappings[number]
+		bug = self.bugmappings[number]
+		hash, lamport = bug.hash, bug.lamport
 		bug = json.loads('\n'.join(run('git bug show --format json', hash, path = self.path)))
 		metadata = [*run('git bug show --field creationMetadata', hash, path = self.path)]
 		metadata = {k:v for k,v in zip(metadata[0::2],metadata[1::2])}
@@ -256,107 +443,11 @@ class Bugs:
 		self.bugmappings[number] = bug.hash
 
 usermap = Users()
-bugmap = Bugs()
+bugmap = Bugs(events)
 #issuemap = {}
 eventmap = {}
 
-
-parser = argparse.ArgumentParser()
-parser.add_argument("dir", help="folder containing only gharchive newline-delimited .json files")
-args = parser.parse_args()
-
-def parsedate(item):
-	return dateutil.parser.isoparse(item.replace('/','-').replace(' -','-').replace(' +','+'))
-def id2githubid(type, id):
-	return base64.b64encode(bytes(type + str(id), 'utf-8')).decode()
-
-class EventsDir:
-	def __init__(self, dir):
-		self.dir = dir
-		self.filenames = [*os.listdir(self.dir)]
-		if len(self.filenames):
-			print('WARNING: this is just a work in progress and may make new issues and users in your git-bug repository every time it is run.')
-		self.filenames.sort()
-		self.filecount = len(self.filenames)
-	def __iter__(self):
-		lastevent = None
-		filenum = 0
-		# so we take two files
-		# sort them together
-		# and then process only 1 file's length
-		for filename, nextfilename in zip(self.filenames, (*self.filenames[1:],None)):
-			# two files are sorted together
-			# and then only data equivalent in length to the first file kept
-			# this is a way to handle creation dates being out of order
-			with open(os.path.join(self.dir,filename)) as file:
-				events = [{'json': line[:-1], **json.loads(line)} for line in file.readlines()]
-			cutoff = len(events)
-			if nextfilename:
-				with open(os.path.join(self.dir,nextfilename)) as nextfile:
-					events.extend([{'json': line[:-1], **json.loads(line)} for line in nextfile.readlines()])
-			def eventcmp(a, b):
-				if 'id' in a and 'id' in b:
-					a, b = (int(e['id']) for e in (a, b))
-				else:
-					a, b = (parsedate(e['created_at']) for e in (a, b))
-				return (a > b) - (a < b)
-			events.sort(key = functools.cmp_to_key(eventcmp))
-			events = events[:cutoff]
-
-			eventcount = len(events)
-			eventnum = 0
-			for event in events:
-				eventnum += 1
-				self.mutate_event(event)
-				if lastevent is not None:
-					if eventcmp(event, lastevent) < 0:
-						raise AssertionError('out of order events', filename, 'previous:', (lastevent['id'],lastevent['created_at']), 'now:', (event['id'],event['created_at']))
-				event['fileprogress'] = int((filenum + eventnum / eventcount)*1000)/1000
-				yield event
-				lastevent = event
-			filenum += 1
-	def mutate_event(self, event):
-		if 'actor_attributes' in event:
-			event['actor'] = event['actor_attributes']
-			del event['actor_attributes']
-		# payload issue has a 'user' field sometimes, which contains node_id of user
-		# it could be merged with actor to get node_id, dunno
-		event['actor'] = self.translate_actor(event['actor'])
-		if 'payload' in event:
-			event['payload'] = self.translate_payload(event['payload'])
-		if 'repo' in event:
-			del event['repo']
-		if 'repository' in event:
-			del event['repository']
-		event['created_at_datetime'] = parsedate(event['created_at'])
-	def translate_actor(self, actor):
-		if not isinstance(actor, dict):
-			return { 'login': 'actor' }
-		actor = {**actor}
-		if 'node_id' not in actor and 'id' in actor:
-			actor['node_id'] = id2githubid('04:User', actor['id'])
-		if not 'avatar_url' in actor:
-			if 'gravatar_id' in actor:
-				actor['avatar_url'] = 'https://gravatar.com/avatar/' + actor['gravatar_id']
-			else:
-				actor['avatar_url'] = ''
-		return actor
-	def translate_payload(self, payload):
-		payload = {**payload}
-		if 'issue' in payload and isinstance(payload['issue'], dict):
-			issue = payload['issue']
-			if 'number' not in issue and 'number' in payload:
-				issue['number'] = payload['number']
-			if 'node_id' not in issue and 'id' in issue:
-				issue['node_id'] = id2githubid('05:Issue', issue['id'])
-		if 'comment' in payload and isinstance(payload['comment'], dict):
-			comment = payload['comment']
-			if 'node_id' not in comment and 'id' in comment and 'issue' in payload:
-				comment['node_id'] = id2githubid('012:IssueComment', comment['id'])
-			
-		return payload
 		
-events = EventsDir(args.dir)
 
 # first import users so they can be referenced in bugs
 # this just scrapes the actor field for users right now.  add more fields as needed.
@@ -441,12 +532,56 @@ def importevent(event, events):
 		pass
 	raise Exception(event)
 		
-	
+
 try:
-	with tqdm(total=events.filecount,desc='json files, events',unit='file') as progress:
-		for event in events:
-			importevent(event, events)
-			progress.update(event['fileprogress'] - progress.n)
+	for bugnumber, bugevents in tqdm(bugmap.bugcache.items()):
+		if bugevents[0]['type'] != 'IssuesEvent' or bugevents[0]['payload']['action'] != 'opened':
+			for event in bugevents:
+				print(bugnumber, event)
+				event = events.from_fileref(event)
+				del event['created_at_datetime']
+				print(json.dumps(event,indent=2))
+				raise Exception("first event is not opened?  are they in right order?")
+		# accumulate all the bug details, so it can be made in one go.
+		
+		ghbug = bugevents[0]['payload']['issue']
+		# ADD METADATA
+		bug = Bug(
+			ghbug['title'],
+			ghbug['body'],
+			usermap[ghbug['user']['login']].hash,
+			int(parsedate(ghbug['created_at']).timestamp()),
+			'open',
+			ghbug['url'],
+			ghbug['json'],
+			ghbug['node_id']
+		)
+		bugmapevents = []
+		if ghbug['state'] == 'open':
+			pass
+		elif ghbug['state'] == 'closed':
+			if bugevents[0]['payload']['action'] == 'closed':
+				pass
+			elif bugevents[0]['payload']['action'] == 'opened':
+				# ADD USER
+				bugmapevents.append((parsedate(ghbug['closed_at']).timestamp(), 'close', ghbug['json']))
+
+			else:
+				raise Exception('not sure what state ' + bugevents[0]['payload']['action'] + ' is')
+		else:
+			raise Exception('not sure what state ' + ghbug['state'] + ' is')
+
+		for bugevent in bugevents:
+			# we could run into an issue, unknown.  look at bugs afterwards to make sure are correct.
+			if bugevent['payload']['action'] in ('closed','opened'):
+				# status event
+				#bugmapevents.append((parsedate(ghbug[
+				pass
+		break
+	#with tqdm(total=events.filecount,desc='json files, events',unit='file') as progress:
+	#	for event in events:
+	#		importevent(event, events)
+	#		progress.update(event['fileprogress'] - progress.n)
 except Exception as e:
 	event=e.args[0]
 	del event['json']
